@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "676323736878",
+    "project_id": "timbo-4fad8",
+    "storage_bucket": "timbo-4fad8.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:676323736878:android:4e3f10aadbb2e92a0dcebf",
+        "android_client_info": {
+          "package_name": "com.timbo.timbo_app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "676323736878-qr3dnjrrmib2urtn5tfm82abv6dc7u2k.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.timbo.timbo_app",
+            "certificate_hash": "f317aaabd1639b8168a5c820dbbef3c5c3c2b2d7"
+          }
+        },
+        {
+          "client_id": "676323736878-j6tner3tshgfu71bm4eu34v54aqpkpvl.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDFDY80vwhwGqewuAJZQJk88uHLrEVsm1M"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "676323736878-j6tner3tshgfu71bm4eu34v54aqpkpvl.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
