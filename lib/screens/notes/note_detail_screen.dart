@@ -1,14 +1,14 @@
-import 'dart:io';
+import 'dart:io' show File;
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:image_picker/image_picker.dart';
 import '../../config/theme.dart';
 import '../../models/note_model.dart';
 import '../../providers/notes_provider.dart';
-// TODO: Add export notes to PDF feature
 
 class NoteDetailScreen extends StatefulWidget {
   const NoteDetailScreen({super.key});
@@ -22,26 +22,33 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
   late TextEditingController _contentController;
   NoteModel? _note;
   bool _hasUnsavedChanges = false;
+  bool _controllersInitialized = false;
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    if (_controllersInitialized) return;
     final noteId = ModalRoute.of(context)?.settings.arguments as String?;
-    if (noteId != null && _note == null) {
+    _titleController = TextEditingController();
+    _contentController = TextEditingController();
+    if (noteId != null) {
       final provider = context.read<NotesProvider>();
       final note = provider.notes.where((n) => n.id == noteId).firstOrNull;
       if (note != null) {
         _note = note;
-        _titleController = TextEditingController(text: note.title);
-        _contentController = TextEditingController(text: note.content);
+        _titleController.text = note.title;
+        _contentController.text = note.content;
       }
     }
+    _controllersInitialized = true;
   }
 
   @override
   void dispose() {
-    _titleController.dispose();
-    _contentController.dispose();
+    if (_controllersInitialized) {
+      _titleController.dispose();
+      _contentController.dispose();
+    }
     super.dispose();
   }
 
@@ -68,7 +75,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
         _note = updated;
         _hasUnsavedChanges = false;
       });
-      HapticFeedback.lightImpact();
+      try { HapticFeedback.lightImpact(); } catch (_) {}
     } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -116,7 +123,7 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
     try {
       await context.read<NotesProvider>().togglePin(_note!.id);
       setState(() => _note!.isPinned = !_note!.isPinned);
-      HapticFeedback.selectionClick();
+      try { HapticFeedback.selectionClick(); } catch (_) {}
     } catch (_) {}
   }
 
@@ -142,8 +149,10 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
     );
     if (confirmed == true) {
       try {
-        await context.read<NotesProvider>().deleteNote(_note!.id);
-        HapticFeedback.mediumImpact();
+        final noteId = _note!.id;
+        if (!mounted) return;
+        await context.read<NotesProvider>().deleteNote(noteId);
+        try { HapticFeedback.mediumImpact(); } catch (_) {}
         if (mounted) Navigator.pop(context);
       } catch (_) {}
     }
@@ -153,6 +162,23 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
     if (_note == null) return;
     final text = '${_note!.title}\n\n${_note!.content}';
     Share.share(text);
+  }
+
+  Future<void> _attachImage() async {
+    if (_note == null) return;
+    try {
+      final picker = ImagePicker();
+      final picked = await picker.pickImage(source: ImageSource.gallery, maxWidth: 1024);
+      if (picked != null && mounted) {
+        final paths = List<String>.from(_note!.mediaPaths)..add(picked.path);
+        final updated = _note!.copyWith(mediaPaths: paths);
+        await context.read<NotesProvider>().updateNote(updated);
+        setState(() {
+          _note = updated;
+          _hasUnsavedChanges = false;
+        });
+      }
+    } catch (_) {}
   }
 
   @override
@@ -176,7 +202,8 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
       onPopInvokedWithResult: (didPop, _) async {
         if (didPop) return;
         final shouldPop = await _onWillPop();
-        if (shouldPop && mounted) {
+        if (!context.mounted) return;
+        if (shouldPop) {
           Navigator.pop(context);
         }
       },
@@ -185,13 +212,18 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
         appBar: AppBar(
           title: Text(
             DateFormat('MMM d, yyyy').format(_note!.updatedAt),
-            style: GoogleFonts.inter(fontSize: 14, color: textSecondary),
+            style: TextStyle(fontFamily: 'Satoshi', fontSize: 14, color: textSecondary),
           ),
           leading: IconButton(
             icon: Icon(Icons.arrow_back_rounded, color: textPrimary),
             onPressed: _saveAndPop,
           ),
           actions: [
+            if (!kIsWeb)
+              IconButton(
+                icon: Icon(Icons.image_outlined, color: textSecondary),
+                onPressed: _attachImage,
+              ),
             IconButton(
               icon: Icon(
                 _note!.isPinned ? Icons.push_pin_rounded : Icons.push_pin_outlined,
@@ -209,101 +241,107 @@ class _NoteDetailScreenState extends State<NoteDetailScreen> {
             ),
           ],
         ),
-        body: SingleChildScrollView(
-          padding: const EdgeInsets.all(AppSpacing.lg),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              TextField(
-                controller: _titleController,
-                style: GoogleFonts.sora(
-                  fontSize: 24, fontWeight: FontWeight.w700, color: textPrimary,
-                ),
-                decoration: InputDecoration(
-                  hintText: 'Title',
-                  hintStyle: GoogleFonts.sora(
-                    fontSize: 24, fontWeight: FontWeight.w700,
-                    color: textSecondary.withValues(alpha: 0.3),
-                  ),
-                  border: InputBorder.none,
-                  enabledBorder: InputBorder.none,
-                  focusedBorder: InputBorder.none,
-                  fillColor: Colors.transparent,
-                  filled: false,
-                ),
-                maxLines: null,
-                onChanged: (_) { _markChanged(); _save(); },
-              ),
-              const SizedBox(height: 4),
-              Text(
-                'Last edited ${DateFormat('MMM d, yyyy – h:mm a').format(_note!.updatedAt)}',
-                style: GoogleFonts.inter(fontSize: 12, color: textSecondary.withValues(alpha: 0.6)),
-              ),
-              const SizedBox(height: AppSpacing.lg),
-              if (_note!.mediaPaths.isNotEmpty) ...[
-                SizedBox(
-                  height: 180,
-                  child: ListView.separated(
-                    scrollDirection: Axis.horizontal,
-                    itemCount: _note!.mediaPaths.length,
-                    separatorBuilder: (_, __) => const SizedBox(width: 8),
-                    itemBuilder: (_, i) {
-                      final path = _note!.mediaPaths[i];
-                      return ClipRRect(
-                        borderRadius: BorderRadius.circular(AppRadius.sm),
-                        child: Image.file(File(path), width: 180, fit: BoxFit.cover),
-                      );
-                    },
-                  ),
-                ),
-                const SizedBox(height: AppSpacing.md),
-              ],
-              if (_note!.voiceNotePath != null) ...[
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: cardColor,
-                    borderRadius: BorderRadius.circular(AppRadius.sm),
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(Icons.mic_rounded, color: primary, size: 20),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text('Voice Note',
-                                style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w500, color: textPrimary)),
-                            Text('Tap to play',
-                                style: GoogleFonts.inter(fontSize: 11, color: textSecondary)),
-                          ],
-                        ),
+        body: Hero(
+          tag: 'note_${_note!.id}',
+          child: Material(
+            type: MaterialType.transparency,
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(AppSpacing.lg),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  TextField(
+                    controller: _titleController,
+                    style: TextStyle(fontFamily: 'Satoshi', 
+                      fontSize: 24, fontWeight: FontWeight.w700, color: textPrimary,
+                    ),
+                    decoration: InputDecoration(
+                      hintText: 'Title',
+                      hintStyle: TextStyle(fontFamily: 'Satoshi', 
+                        fontSize: 24, fontWeight: FontWeight.w700,
+                        color: textSecondary.withValues(alpha: 0.3),
                       ),
-                      Icon(Icons.play_circle_outline_rounded, color: primary, size: 28),
-                    ],
+                      border: InputBorder.none,
+                      enabledBorder: InputBorder.none,
+                      focusedBorder: InputBorder.none,
+                      fillColor: Colors.transparent,
+                      filled: false,
+                    ),
+                    maxLines: null,
+                    onChanged: (_) { _markChanged(); _save(); },
                   ),
-                ),
-                const SizedBox(height: AppSpacing.md),
-              ],
-              TextField(
-                controller: _contentController,
-                style: GoogleFonts.inter(fontSize: 16, height: 1.6, color: textPrimary),
-                decoration: InputDecoration(
-                  hintText: 'Start writing...',
-                  hintStyle: GoogleFonts.inter(
-                    fontSize: 16, color: textSecondary.withValues(alpha: 0.3),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Last edited ${DateFormat('MMM d, yyyy – h:mm a').format(_note!.updatedAt)}',
+                    style: TextStyle(fontFamily: 'Satoshi', fontSize: 12, color: textSecondary.withValues(alpha: 0.6)),
                   ),
-                  border: InputBorder.none,
-                  enabledBorder: InputBorder.none,
-                  focusedBorder: InputBorder.none,
-                  fillColor: Colors.transparent,
-                  filled: false,
-                ),
-                maxLines: null,
-                onChanged: (_) { _markChanged(); _save(); },
+                  const SizedBox(height: AppSpacing.lg),
+                  if (_note!.mediaPaths.isNotEmpty && !kIsWeb) ...[
+                    SizedBox(
+                      height: 180,
+                      child: ListView.separated(
+                        scrollDirection: Axis.horizontal,
+                        itemCount: _note!.mediaPaths.length,
+                        separatorBuilder: (_, __) => const SizedBox(width: 8),
+                        itemBuilder: (_, i) {
+                          final path = _note!.mediaPaths[i];
+                          return ClipRRect(
+                            borderRadius: BorderRadius.circular(AppRadius.sm),
+                            child: Image.file(File(path), width: 180, fit: BoxFit.cover),
+                          );
+                        },
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.md),
+                  ],
+                  if (_note!.voiceNotePath != null) ...[
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: cardColor,
+                        borderRadius: BorderRadius.circular(AppRadius.sm),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(Icons.mic_rounded, color: primary, size: 20),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text('Voice Note',
+                                    style: TextStyle(fontFamily: 'Satoshi', fontSize: 13, fontWeight: FontWeight.w500, color: textPrimary)),
+                                Text('Tap to play',
+                                    style: TextStyle(fontFamily: 'Satoshi', fontSize: 11, color: textSecondary)),
+                              ],
+                            ),
+                          ),
+                          Icon(Icons.play_circle_outline_rounded, color: primary, size: 28),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.md),
+                  ],
+                  TextField(
+                    controller: _contentController,
+                    style: TextStyle(fontFamily: 'Satoshi', fontSize: 16, height: 1.6, color: textPrimary),
+                    decoration: InputDecoration(
+                      hintText: 'Start writing...',
+                      hintStyle: TextStyle(fontFamily: 'Satoshi', 
+                        fontSize: 16, color: textSecondary.withValues(alpha: 0.3),
+                      ),
+                      border: InputBorder.none,
+                      enabledBorder: InputBorder.none,
+                      focusedBorder: InputBorder.none,
+                      fillColor: Colors.transparent,
+                      filled: false,
+                    ),
+                    maxLines: null,
+                    onChanged: (_) { _markChanged(); _save(); },
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
         ),
       ),

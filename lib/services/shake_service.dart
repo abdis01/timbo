@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:math';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:sensors_plus/sensors_plus.dart';
 import '../widgets/quick_capture_popup.dart';
@@ -38,13 +39,19 @@ class ShakeService {
   }
 
   void _startListener() {
+    if (kIsWeb) return;
+    final platform = defaultTargetPlatform;
+    if (platform != TargetPlatform.android && platform != TargetPlatform.iOS) return;
     _subscription?.cancel();
 
-    _subscription =
-        accelerometerEventStream(samplingPeriod: const Duration(milliseconds: 100))
-            .listen(_onAccelerometerEvent);
-
-    _isListening = true;
+    try {
+      _subscription =
+          accelerometerEventStream(samplingPeriod: const Duration(milliseconds: 100))
+              .listen(_onAccelerometerEvent);
+      _isListening = true;
+    } catch (_) {
+      _isListening = false;
+    }
   }
 
   void _onAccelerometerEvent(AccelerometerEvent event) {

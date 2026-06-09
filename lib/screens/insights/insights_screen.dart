@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:shimmer/shimmer.dart';
 import '../../config/theme.dart';
@@ -7,9 +6,8 @@ import '../../services/gemini_service.dart';
 import '../../services/premium_service.dart';
 import '../../widgets/insight_card.dart';
 import '../../widgets/premium_lock_widget.dart';
-import '../../widgets/premium_upgrade_sheet.dart';
-import '../../services/firebase_service.dart';
-import '../../services/hive_service.dart';
+import '../../widgets/subscription_utils.dart';
+import '../../widgets/retry_widget.dart';
 
 class _InsightData {
   final InsightType type;
@@ -35,6 +33,7 @@ class _InsightsScreenState extends State<InsightsScreen>
   List<_InsightData> _insights = [];
   bool _loading = true;
   bool _refreshing = false;
+  bool _hasError = false;
   final Map<int, AnimationController> _animControllers = {};
   final Map<int, Animation<double>> _animations = {};
 
@@ -75,7 +74,13 @@ class _InsightsScreenState extends State<InsightsScreen>
 
   Future<void> _generateInsights() async {
     if (_refreshing) return;
-    setState(() => _loading = _insights.isEmpty ? true : _refreshing = true);
+    setState(() {
+      if (_insights.isEmpty) {
+        _loading = true;
+      } else {
+        _refreshing = true;
+      }
+    });
 
     List<String> results;
     try {
@@ -87,10 +92,7 @@ class _InsightsScreenState extends State<InsightsScreen>
       ]);
     } catch (_) {
       if (mounted) {
-        setState(() { _loading = false; _refreshing = false; });
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Timbo is thinking... try again in a moment.')),
-        );
+        setState(() { _loading = false; _refreshing = false; _hasError = true; });
       }
       return;
     }
@@ -120,7 +122,7 @@ class _InsightsScreenState extends State<InsightsScreen>
       backgroundColor: cs.surface,
       appBar: AppBar(
         title: Text('Timbo Insights',
-            style: GoogleFonts.sora(
+            style: TextStyle(fontFamily: 'Satoshi', 
                 fontSize: 20, fontWeight: FontWeight.w600, color: cs.onSurface)),
         actions: [
           if (!_loading)
@@ -137,24 +139,37 @@ class _InsightsScreenState extends State<InsightsScreen>
             ),
         ],
       ),
-      body: _loading ? _shimmerList() : _insightsList(cs.onSurface, cs.onSurfaceVariant),
+      body: _hasError && _insights.isEmpty
+          ? RetryWidget(
+              message: 'Timbo is thinking... try again in a moment.',
+              onRetry: () {
+                setState(() => _hasError = false);
+                _generateInsights();
+              },
+            )
+          : _loading
+              ? _shimmerList(cs)
+              : RefreshIndicator(
+                  onRefresh: _generateInsights,
+                  child: _insightsList(cs.onSurface, cs.onSurfaceVariant),
+                ),
     );
   }
 
-  Widget _shimmerList() {
+  Widget _shimmerList(ColorScheme cs) {
     return Shimmer.fromColors(
-      baseColor: Colors.grey.withValues(alpha: 0.15),
-      highlightColor: Colors.grey.withValues(alpha: 0.05),
+      baseColor: cs.surfaceContainerHighest.withValues(alpha: 0.5),
+      highlightColor: cs.surfaceContainerHighest.withValues(alpha: 0.2),
       child: ListView.separated(
         padding: const EdgeInsets.all(16),
         itemCount: 4,
         separatorBuilder: (_, __) => const SizedBox(height: 14),
-        itemBuilder: (_, __) => _shimmerCard(),
+        itemBuilder: (_, __) => _shimmerCard(cs),
       ),
     );
   }
 
-  Widget _shimmerCard() {
+  Widget _shimmerCard(ColorScheme cs) {
     final cardColor = context.cardColor;
     return Container(
       height: 140,
@@ -168,12 +183,12 @@ class _InsightsScreenState extends State<InsightsScreen>
         children: [
           Row(
             children: [
-              Container(width: 32, height: 32, decoration: const BoxDecoration(
-                color: Colors.white, borderRadius: BorderRadius.all(Radius.circular(8)),
+              Container(width: 32, height: 32, decoration: BoxDecoration(
+                color: cs.surfaceContainerHighest, borderRadius: const BorderRadius.all(Radius.circular(8)),
               )),
               const SizedBox(width: 10),
-              Container(width: 120, height: 14, decoration: const BoxDecoration(
-                color: Colors.white, borderRadius: BorderRadius.all(Radius.circular(4)),
+              Container(width: 120, height: 14, decoration: BoxDecoration(
+                color: cs.surfaceContainerHighest, borderRadius: const BorderRadius.all(Radius.circular(4)),
               )),
             ],
           ),
@@ -181,17 +196,17 @@ class _InsightsScreenState extends State<InsightsScreen>
           Container(
             width: double.infinity,
             height: 12,
-            decoration: const BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.all(Radius.circular(4))),
+            decoration: BoxDecoration(
+                color: cs.surfaceContainerHighest,
+                    borderRadius: const BorderRadius.all(Radius.circular(4))),
           ),
           const SizedBox(height: 8),
           Container(
             width: 200,
             height: 12,
-            decoration: const BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.all(Radius.circular(4))),
+            decoration: BoxDecoration(
+                color: cs.surfaceContainerHighest,
+                borderRadius: const BorderRadius.all(Radius.circular(4))),
           ),
         ],
       ),
@@ -204,12 +219,12 @@ class _InsightsScreenState extends State<InsightsScreen>
       children: [
         Text(
           'Personalized insights based on your data',
-          style: GoogleFonts.inter(fontSize: 13, color: textSecondary),
+          style: TextStyle(fontFamily: 'Satoshi', fontSize: 13, color: textSecondary),
         ),
         const SizedBox(height: 8),
         Text(
           _formatLastRefresh(),
-          style: GoogleFonts.inter(
+          style: TextStyle(fontFamily: 'Satoshi', 
               fontSize: 11, color: textSecondary.withValues(alpha: 0.5)),
         ),
         const SizedBox(height: 16),
@@ -236,7 +251,7 @@ class _InsightsScreenState extends State<InsightsScreen>
           opacity: anim.value,
           child: Transform(
             transform: Matrix4.identity()
-              ..translate(0.0, 30.0 * (1.0 - anim.value))
+              ..setTranslationRaw(0.0, 30.0 * (1.0 - anim.value), 0.0)
               ..rotateZ(0.02 * (1.0 - anim.value)),
             alignment: Alignment.center,
             child: child,
@@ -284,39 +299,6 @@ class _InsightsScreenState extends State<InsightsScreen>
   }
 
   void _showUpgradeSheet() {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) => PremiumUpgradeSheet(onJoinWaitlist: _joinWaitlist),
-    );
-  }
-
-  Future<void> _joinWaitlist() async {
-    final user = HiveService.instance.getUser();
-    final email = user?.email;
-    if (email == null || email.isEmpty) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Please set your email in profile first')),
-        );
-      }
-      return;
-    }
-    try {
-      await FirebaseService.instance.waitlistSignup(email);
-      if (mounted) {
-        Navigator.pop(context);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('You\'re on the waitlist! We\'ll notify you.')),
-        );
-      }
-    } catch (_) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Something went wrong. Try again.')),
-        );
-      }
-    }
+    showUpgradeSheet(context);
   }
 }

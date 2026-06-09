@@ -30,26 +30,31 @@ class SyncService extends ChangeNotifier {
   bool get isOnline => _isOnline;
 
   Future<void> initialize() async {
-    final userId = FirebaseService.instance.currentUser?.uid;
-    if (userId != null) {
-      _lastSyncTime = await FirebaseService.instance.getLastSyncTime(userId);
-    }
-    
-    _connectivitySub = FirebaseService.instance.onConnectivityChanged.listen((online) {
-      _isOnline = online;
-      if (online) {
-        _setStatus(SyncStatus.idle, 'Connected');
-        _attemptPendingSync();
-      } else {
-        _setStatus(SyncStatus.offline, 'Offline — changes saved locally');
+    try {
+      if (!FirebaseService.instance.isAvailable) return;
+      final userId = FirebaseService.instance.currentUser?.uid;
+      if (userId != null) {
+        _lastSyncTime = await FirebaseService.instance.getLastSyncTime(userId);
       }
-    });
-    
-    _isOnline = await FirebaseService.instance.isConnected();
+
+      _connectivitySub = FirebaseService.instance.onConnectivityChanged.listen((online) {
+        _isOnline = online;
+        if (online) {
+          _setStatus(SyncStatus.idle, 'Connected');
+          _attemptPendingSync();
+        } else {
+          _setStatus(SyncStatus.offline, 'Offline — changes saved locally');
+        }
+      });
+
+      _isOnline = await FirebaseService.instance.isConnected();
+    } catch (_) {
+      _isOnline = false;
+    }
     if (!_isOnline) {
       _setStatus(SyncStatus.offline, 'Offline — changes saved locally');
     }
-    
+
     _autoSyncTimer = Timer.periodic(const Duration(minutes: 30), (_) {
       _autoSync();
     });
@@ -72,6 +77,7 @@ class SyncService extends ChangeNotifier {
   Future<void> performSync() async {
     final user = HiveService.instance.getUser();
     if (user == null) return;
+    if (!FirebaseService.instance.isAvailable) return;
     final userId = FirebaseService.instance.currentUser?.uid;
     if (userId == null) return;
     
@@ -83,6 +89,11 @@ class SyncService extends ChangeNotifier {
       final expenses = HiveService.instance.getAllExpenses();
       final reminders = HiveService.instance.getAllReminders();
       final captures = HiveService.instance.getAllCaptures();
+
+      final localNoteIds = notes.map((n) => n.id).toSet();
+      final localExpenseIds = expenses.map((e) => e.id).toSet();
+      final localReminderIds = reminders.map((r) => r.id).toSet();
+      final localCaptureIds = captures.map((c) => c.id).toSet();
       
       if (_lastSyncTime == null) {
         await FirebaseService.instance.fullSync(userId, 
@@ -93,6 +104,53 @@ class SyncService extends ChangeNotifier {
         
         final cloudData = await FirebaseService.instance.downloadFromCloud(userId);
         await _mergeCloudData(cloudData, notes, expenses, reminders, captures);
+
+        final cloudNoteIds = cloudData.notes.map((n) => n.id).toSet();
+        final cloudExpenseIds = cloudData.expenses.map((e) => e.id).toSet();
+        final cloudReminderIds = cloudData.reminders.map((r) => r.id).toSet();
+        final cloudCaptureIds = cloudData.captures.map((c) => c.id).toSet();
+
+        for (final note in cloudData.notes) {
+          if (!localNoteIds.contains(note.id)) {
+            await FirebaseService.instance.deleteNote(userId, note.id);
+          }
+        }
+        for (final expense in cloudData.expenses) {
+          if (!localExpenseIds.contains(expense.id)) {
+            await FirebaseService.instance.deleteExpense(userId, expense.id);
+          }
+        }
+        for (final reminder in cloudData.reminders) {
+          if (!localReminderIds.contains(reminder.id)) {
+            await FirebaseService.instance.deleteReminder(userId, reminder.id);
+          }
+        }
+        for (final capture in cloudData.captures) {
+          if (!localCaptureIds.contains(capture.id)) {
+            await FirebaseService.instance.deleteCapture(userId, capture.id);
+          }
+        }
+
+        for (final note in notes) {
+          if (!cloudNoteIds.contains(note.id)) {
+            await HiveService.instance.deleteNote(note.id);
+          }
+        }
+        for (final expense in expenses) {
+          if (!cloudExpenseIds.contains(expense.id)) {
+            await HiveService.instance.deleteExpense(expense.id);
+          }
+        }
+        for (final reminder in reminders) {
+          if (!cloudReminderIds.contains(reminder.id)) {
+            await HiveService.instance.deleteReminder(reminder.id);
+          }
+        }
+        for (final capture in captures) {
+          if (!cloudCaptureIds.contains(capture.id)) {
+            await HiveService.instance.deleteCapture(capture.id);
+          }
+        }
       }
       
       _lastSyncTime = DateTime.now();
@@ -116,25 +174,25 @@ class SyncService extends ChangeNotifier {
     for (final cloudNote in cloudData.notes) {
       final localNote = localNotes.where((n) => n.id == cloudNote.id).firstOrNull;
       if (localNote == null || cloudNote.updatedAt.isAfter(localNote.updatedAt)) {
-        await HiveService.instance.saveNoteDirectly(cloudNote);
+        await HiveService.instance.saveNote(cloudNote);
       }
     }
     for (final cloudExpense in cloudData.expenses) {
       final local = localExpenses.where((e) => e.id == cloudExpense.id).firstOrNull;
       if (local == null || cloudExpense.updatedAt.isAfter(local.updatedAt)) {
-        await HiveService.instance.saveExpenseDirectly(cloudExpense);
+        await HiveService.instance.saveExpense(cloudExpense);
       }
     }
     for (final cloudReminder in cloudData.reminders) {
       final local = localReminders.where((r) => r.id == cloudReminder.id).firstOrNull;
       if (local == null || cloudReminder.updatedAt.isAfter(local.updatedAt)) {
-        await HiveService.instance.saveReminderDirectly(cloudReminder);
+        await HiveService.instance.saveReminder(cloudReminder);
       }
     }
     for (final cloudCapture in cloudData.captures) {
       final local = localCaptures.where((c) => c.id == cloudCapture.id).firstOrNull;
       if (local == null || cloudCapture.updatedAt.isAfter(local.updatedAt)) {
-        await HiveService.instance.saveCaptureDirectly(cloudCapture);
+        await HiveService.instance.saveCapture(cloudCapture);
       }
     }
   }

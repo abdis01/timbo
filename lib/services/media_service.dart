@@ -83,8 +83,13 @@ class MediaService {
   }
 
   Future<bool> requestCameraPermission() async {
-    final status = await Permission.camera.request();
-    return status.isGranted;
+    if (!Platform.isAndroid && !Platform.isIOS) return false;
+    try {
+      final status = await Permission.camera.request();
+      return status.isGranted;
+    } catch (_) {
+      return false;
+    }
   }
 
   Future<bool> requestStoragePermission() async {

@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import 'package:table_calendar/table_calendar.dart';
@@ -12,6 +11,7 @@ import '../../models/reminder_model.dart';
 import '../../services/notification_service.dart';
 import '../../widgets/reminder_card.dart';
 import '../../widgets/bottom_nav.dart';
+import '../../widgets/empty_state_widget.dart';
 // TODO: Add iOS home screen widget
 
 class RemindersScreen extends StatefulWidget {
@@ -60,15 +60,17 @@ class _RemindersScreenState extends State<RemindersScreen> {
 
     return Scaffold(
       backgroundColor: cs.surface,
-      bottomNavigationBar: AppBottomNav(activeRoute: AppRoutes.reminders),
+      bottomNavigationBar: const AppBottomNav(activeRoute: AppRoutes.reminders),
       appBar: AppBar(
         automaticallyImplyLeading: false,
         title: Text('Reminders',
-            style: GoogleFonts.sora(fontSize: 20, fontWeight: FontWeight.w600, color: cs.onSurface)),
+            style: TextStyle(fontFamily: 'Satoshi', fontSize: 20, fontWeight: FontWeight.w600, color: cs.onSurface)),
       ),
       body: _isLoading
           ? _shimmerList(cs)
-          : Consumer<RemindersProvider>(
+          : RefreshIndicator(
+              onRefresh: _loadReminders,
+              child: Consumer<RemindersProvider>(
               builder: (context, provider, _) {
                 final days = _reminderDays(provider);
                 final day = _selectedDay ?? DateTime.now();
@@ -89,7 +91,7 @@ class _RemindersScreenState extends State<RemindersScreen> {
                                   color: cs.onSurfaceVariant.withValues(alpha: 0.5)),
                               const SizedBox(width: 8),
                               Text('No reminders for this day',
-                                  style: GoogleFonts.inter(fontSize: 14, color: cs.onSurfaceVariant)),
+                                  style: TextStyle(fontFamily: 'Satoshi', fontSize: 14, color: cs.onSurfaceVariant)),
                             ],
                           ),
                         ),
@@ -106,7 +108,7 @@ class _RemindersScreenState extends State<RemindersScreen> {
                                 onToggleComplete: () => provider.markComplete(dayReminders[i].id),
                                 onDelete: () {
                                   provider.deleteReminder(dayReminders[i].id);
-                                  HapticFeedback.mediumImpact();
+                                  try { HapticFeedback.mediumImpact(); } catch (_) {}
                                 },
                               ),
                             ),
@@ -119,7 +121,7 @@ class _RemindersScreenState extends State<RemindersScreen> {
                         child: Padding(
                           padding: const EdgeInsets.fromLTRB(AppSpacing.lg, AppSpacing.lg, AppSpacing.lg, AppSpacing.sm),
                           child: Text('Upcoming',
-                              style: GoogleFonts.sora(fontSize: 18, fontWeight: FontWeight.w600, color: cs.onSurface)),
+                              style: TextStyle(fontFamily: 'Satoshi', fontSize: 18, fontWeight: FontWeight.w600, color: cs.onSurface)),
                         ),
                       ),
                       SliverPadding(
@@ -133,7 +135,7 @@ class _RemindersScreenState extends State<RemindersScreen> {
                                 onToggleComplete: () => provider.markComplete(upcoming[i].id),
                                 onDelete: () {
                                   provider.deleteReminder(upcoming[i].id);
-                                  HapticFeedback.mediumImpact();
+                                  try { HapticFeedback.mediumImpact(); } catch (_) {}
                                 },
                               ),
                             ),
@@ -150,6 +152,7 @@ class _RemindersScreenState extends State<RemindersScreen> {
                 );
               },
             ),
+          ),
       floatingActionButton: FloatingActionButton(
         onPressed: () => _showAddSheet(),
         child: const Icon(Icons.add_rounded),
@@ -166,11 +169,11 @@ class _RemindersScreenState extends State<RemindersScreen> {
         child: Column(
           children: [
             Container(height: 300, decoration: BoxDecoration(
-              color: Colors.white, borderRadius: BorderRadius.circular(AppRadius.md),
+              color: cs.surfaceContainerHighest, borderRadius: BorderRadius.circular(AppRadius.md),
             )),
             const SizedBox(height: 16),
-            Container(height: 20, width: 150, decoration: const BoxDecoration(
-              color: Colors.white, borderRadius: BorderRadius.all(Radius.circular(4)),
+            Container(height: 20, width: 150, decoration: BoxDecoration(
+              color: cs.surfaceContainerHighest, borderRadius: const BorderRadius.all(Radius.circular(4)),
             )),
           ],
         ),
@@ -179,33 +182,13 @@ class _RemindersScreenState extends State<RemindersScreen> {
   }
 
   Widget _buildEmptyState(ColorScheme cs) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 48, horizontal: AppSpacing.lg),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 64, height: 64,
-            decoration: BoxDecoration(
-              color: cs.primary.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: Icon(Icons.checklist_rounded, size: 32,
-                color: cs.primary.withValues(alpha: 0.4)),
-          ),
-          const SizedBox(height: 16),
-          Text("You're all clear!",
-              style: GoogleFonts.sora(fontSize: 16, fontWeight: FontWeight.w600, color: cs.onSurface)),
-          const SizedBox(height: 6),
-          Text('No upcoming reminders.',
-              style: GoogleFonts.inter(fontSize: 14, color: cs.onSurfaceVariant)),
-          const SizedBox(height: 20),
-          ElevatedButton.icon(
-            onPressed: () => _showAddSheet(),
-            icon: const Icon(Icons.add_rounded, size: 18),
-            label: Text('Add Reminder', style: GoogleFonts.inter(fontWeight: FontWeight.w600)),
-          ),
-        ],
+    return EmptyStateWidget(
+      imagePath: 'assets/images/empty_reminders.png',
+      message: "You're all clear!\nNo upcoming reminders.",
+      action: ElevatedButton.icon(
+        onPressed: () => _showAddSheet(),
+        icon: const Icon(Icons.add_rounded, size: 18),
+        label: const Text('Add Reminder', style: TextStyle(fontFamily: 'Satoshi', fontWeight: FontWeight.w600)),
       ),
     );
   }
@@ -234,14 +217,14 @@ class _RemindersScreenState extends State<RemindersScreen> {
             selectedDecoration: BoxDecoration(color: cs.primary, shape: BoxShape.circle),
             todayDecoration: BoxDecoration(color: cs.primary.withValues(alpha: 0.3), shape: BoxShape.circle),
             markerDecoration: BoxDecoration(color: cs.primary, shape: BoxShape.circle),
-            defaultTextStyle: GoogleFonts.inter(fontSize: 14, color: cs.onSurface),
-            weekendTextStyle: GoogleFonts.inter(fontSize: 14, color: cs.onSurfaceVariant),
-            outsideTextStyle: GoogleFonts.inter(fontSize: 14, color: cs.onSurfaceVariant.withValues(alpha: 0.4)),
-            todayTextStyle: GoogleFonts.inter(fontSize: 14, color: cs.onSurface),
+            defaultTextStyle: TextStyle(fontFamily: 'Satoshi', fontSize: 14, color: cs.onSurface),
+            weekendTextStyle: TextStyle(fontFamily: 'Satoshi', fontSize: 14, color: cs.onSurfaceVariant),
+            outsideTextStyle: TextStyle(fontFamily: 'Satoshi', fontSize: 14, color: cs.onSurfaceVariant.withValues(alpha: 0.4)),
+            todayTextStyle: TextStyle(fontFamily: 'Satoshi', fontSize: 14, color: cs.onSurface),
           ),
           headerStyle: HeaderStyle(
-            titleTextStyle: GoogleFonts.sora(fontSize: 16, fontWeight: FontWeight.w600, color: cs.onSurface),
-            formatButtonTextStyle: GoogleFonts.inter(fontSize: 13, color: cs.primary),
+            titleTextStyle: TextStyle(fontFamily: 'Satoshi', fontSize: 16, fontWeight: FontWeight.w600, color: cs.onSurface),
+            formatButtonTextStyle: TextStyle(fontFamily: 'Satoshi', fontSize: 13, color: cs.primary),
             formatButtonDecoration: BoxDecoration(
               color: cs.primary.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(AppRadius.sm),
@@ -265,8 +248,8 @@ class _RemindersScreenState extends State<RemindersScreen> {
             },
           ),
           daysOfWeekStyle: DaysOfWeekStyle(
-            weekdayStyle: GoogleFonts.inter(fontSize: 12, color: cs.onSurfaceVariant),
-            weekendStyle: GoogleFonts.inter(fontSize: 12, color: cs.onSurfaceVariant),
+            weekdayStyle: TextStyle(fontFamily: 'Satoshi', fontSize: 12, color: cs.onSurfaceVariant),
+            weekendStyle: TextStyle(fontFamily: 'Satoshi', fontSize: 12, color: cs.onSurfaceVariant),
           ),
         ),
       ),
@@ -281,7 +264,7 @@ class _RemindersScreenState extends State<RemindersScreen> {
     return Padding(
       padding: const EdgeInsets.fromLTRB(AppSpacing.lg, AppSpacing.md, AppSpacing.lg, AppSpacing.sm),
       child: Text(label,
-          style: GoogleFonts.sora(fontSize: 18, fontWeight: FontWeight.w600, color: cs.onSurface)),
+          style: TextStyle(fontFamily: 'Satoshi', fontSize: 18, fontWeight: FontWeight.w600, color: cs.onSurface)),
     );
   }
 
@@ -295,7 +278,7 @@ class _RemindersScreenState extends State<RemindersScreen> {
           try {
             context.read<RemindersProvider>().loadReminders();
           } catch (_) {}
-          HapticFeedback.lightImpact();
+          try { HapticFeedback.lightImpact(); } catch (_) {}
         },
       ),
     );
@@ -334,11 +317,21 @@ class _AddReminderSheetState extends State<_AddReminderSheet> {
     final title = _titleController.text.trim();
     if (title.isEmpty) return;
 
+    final now = DateTime.now();
+    final nowMinute = DateTime(now.year, now.month, now.day, now.hour, now.minute);
+    final scheduledAt = DateTime(_date.year, _date.month, _date.day, _time.hour, _time.minute);
+    if (scheduledAt.isBefore(nowMinute)) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Reminder time must be in the future')),
+        );
+      }
+      return;
+    }
+
     setState(() => _isSaving = true);
 
     try {
-      final scheduledAt = DateTime(_date.year, _date.month, _date.day, _time.hour, _time.minute);
-
       final reminder = ReminderModel(
         title: title,
         description: _descriptionController.text.trim(),
@@ -358,7 +351,6 @@ class _AddReminderSheetState extends State<_AddReminderSheet> {
         scheduledAt: scheduledAt,
       );
 
-      widget.onSaved();
       if (mounted) Navigator.pop(context);
     } catch (_) {
       if (mounted) {
@@ -402,7 +394,7 @@ class _AddReminderSheetState extends State<_AddReminderSheet> {
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
                 child: Text('New Reminder',
-                    style: GoogleFonts.sora(fontSize: 18, fontWeight: FontWeight.w600, color: cs.onSurface)),
+                    style: TextStyle(fontFamily: 'Satoshi', fontSize: 18, fontWeight: FontWeight.w600, color: cs.onSurface)),
               ),
               const SizedBox(height: AppSpacing.sm),
               Expanded(
@@ -414,10 +406,10 @@ class _AddReminderSheetState extends State<_AddReminderSheet> {
                     children: [
                       TextField(
                         controller: _titleController,
-                        style: GoogleFonts.inter(fontSize: 16, color: cs.onSurface),
+                        style: TextStyle(fontFamily: 'Satoshi', fontSize: 16, color: cs.onSurface),
                         decoration: InputDecoration(
                           hintText: 'Remind me to...',
-                          hintStyle: GoogleFonts.inter(color: cs.onSurfaceVariant.withValues(alpha: 0.5)),
+                          hintStyle: TextStyle(fontFamily: 'Satoshi', color: cs.onSurfaceVariant.withValues(alpha: 0.5)),
                           border: InputBorder.none,
                           enabledBorder: InputBorder.none,
                           focusedBorder: InputBorder.none,
@@ -428,10 +420,10 @@ class _AddReminderSheetState extends State<_AddReminderSheet> {
                       TextField(
                         controller: _descriptionController,
                         maxLines: 2,
-                        style: GoogleFonts.inter(fontSize: 14, color: cs.onSurface),
+                        style: TextStyle(fontFamily: 'Satoshi', fontSize: 14, color: cs.onSurface),
                         decoration: InputDecoration(
                           hintText: 'Description (optional)',
-                          hintStyle: GoogleFonts.inter(color: cs.onSurfaceVariant.withValues(alpha: 0.5)),
+                          hintStyle: TextStyle(fontFamily: 'Satoshi', color: cs.onSurfaceVariant.withValues(alpha: 0.5)),
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(AppRadius.sm),
                             borderSide: BorderSide(color: cs.onSurfaceVariant.withValues(alpha: 0.2)),
@@ -457,17 +449,17 @@ class _AddReminderSheetState extends State<_AddReminderSheet> {
                       ),
                       const SizedBox(height: AppSpacing.md),
                       Text('Priority',
-                          style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w500, color: cs.onSurfaceVariant)),
+                          style: TextStyle(fontFamily: 'Satoshi', fontSize: 13, fontWeight: FontWeight.w500, color: cs.onSurfaceVariant)),
                       const SizedBox(height: 6),
                       _buildPriorityChips(cs),
                       const SizedBox(height: AppSpacing.md),
                       Row(
                         children: [
-                          Text('Recurring', style: GoogleFonts.inter(fontSize: 14, color: cs.onSurface)),
+                          Text('Recurring', style: TextStyle(fontFamily: 'Satoshi', fontSize: 14, color: cs.onSurface)),
                           const Spacer(),
                           Switch(
                             value: _isRecurring,
-                            activeColor: cs.primary,
+                            activeThumbColor: cs.primary,
                             onChanged: (v) => setState(() => _isRecurring = v),
                           ),
                         ],
@@ -491,7 +483,7 @@ class _AddReminderSheetState extends State<_AddReminderSheet> {
                                     ),
                                   ),
                                   child: Text(f[0].toUpperCase() + f.substring(1),
-                                      style: GoogleFonts.inter(
+                                      style: TextStyle(fontFamily: 'Satoshi', 
                                         fontSize: 13,
                                         color: active ? cs.primary : cs.onSurface,
                                         fontWeight: active ? FontWeight.w600 : FontWeight.w400,
@@ -510,8 +502,11 @@ class _AddReminderSheetState extends State<_AddReminderSheet> {
                               return GestureDetector(
                                 onTap: () {
                                   setState(() {
-                                    if (selected) _recurringDays.remove(i);
-                                    else _recurringDays.add(i);
+                                    if (selected) {
+                                      _recurringDays.remove(i);
+                                    } else {
+                                      _recurringDays.add(i);
+                                    }
                                   });
                                 },
                                 child: Container(
@@ -523,7 +518,7 @@ class _AddReminderSheetState extends State<_AddReminderSheet> {
                                       color: selected ? cs.primary : cs.onSurfaceVariant.withValues(alpha: 0.3),
                                     ),
                                   ),
-                                  child: Text(_weekDays[i], style: GoogleFonts.inter(
+                                  child: Text(_weekDays[i], style: TextStyle(fontFamily: 'Satoshi', 
                                     fontSize: 13,
                                     color: selected ? cs.primary : cs.onSurface,
                                     fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
@@ -543,7 +538,7 @@ class _AddReminderSheetState extends State<_AddReminderSheet> {
                           child: _isSaving
                               ? const SizedBox(width: 18, height: 18,
                                   child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                              : Text('Save Reminder', style: GoogleFonts.inter(fontWeight: FontWeight.w600)),
+                              : const Text('Save Reminder', style: TextStyle(fontFamily: 'Satoshi', fontWeight: FontWeight.w600)),
                         ),
                       ),
                     ],
@@ -580,7 +575,7 @@ class _AddReminderSheetState extends State<_AddReminderSheet> {
           children: [
             Icon(Icons.calendar_today_rounded, size: 16, color: cs.primary),
             const SizedBox(width: 8),
-            Text(dateStr, style: GoogleFonts.inter(fontSize: 14, color: cs.onSurface)),
+            Text(dateStr, style: TextStyle(fontFamily: 'Satoshi', fontSize: 14, color: cs.onSurface)),
           ],
         ),
       ),
@@ -605,7 +600,7 @@ class _AddReminderSheetState extends State<_AddReminderSheet> {
           children: [
             Icon(Icons.access_time_rounded, size: 16, color: cs.primary),
             const SizedBox(width: 8),
-            Text(timeStr, style: GoogleFonts.inter(fontSize: 14, color: cs.onSurface)),
+            Text(timeStr, style: TextStyle(fontFamily: 'Satoshi', fontSize: 14, color: cs.onSurface)),
           ],
         ),
       ),
@@ -641,7 +636,7 @@ class _AddReminderSheetState extends State<_AddReminderSheet> {
                   Container(width: 8, height: 8,
                     decoration: BoxDecoration(color: p.$3, shape: BoxShape.circle)),
                   const SizedBox(width: 6),
-                  Text(p.$2, style: GoogleFonts.inter(
+                  Text(p.$2, style: TextStyle(fontFamily: 'Satoshi', 
                     fontSize: 13, fontWeight: FontWeight.w500,
                     color: active ? p.$3 : cs.onSurface,
                   )),

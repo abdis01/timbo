@@ -33,6 +33,10 @@ class UserModel extends HiveObject {
   int totalExpenses;
   @HiveField(13)
   int totalReminders;
+  @HiveField(14)
+  String? photoUrl;
+  @HiveField(15)
+  DateTime? trialStartDate;
 
   UserModel({
     String? id,
@@ -49,6 +53,8 @@ class UserModel extends HiveObject {
     this.totalNotes = 0,
     this.totalExpenses = 0,
     this.totalReminders = 0,
+    this.photoUrl,
+    this.trialStartDate,
   })  : id = id ?? const Uuid().v4(),
         joinedAt = joinedAt ?? DateTime.now(),
         lastInteractionReset = lastInteractionReset ?? DateTime.now();
@@ -68,6 +74,8 @@ class UserModel extends HiveObject {
     int? totalNotes,
     int? totalExpenses,
     int? totalReminders,
+    String? photoUrl,
+    DateTime? trialStartDate,
   }) {
     return UserModel(
       id: id ?? this.id,
@@ -87,6 +95,8 @@ class UserModel extends HiveObject {
       totalNotes: totalNotes ?? this.totalNotes,
       totalExpenses: totalExpenses ?? this.totalExpenses,
       totalReminders: totalReminders ?? this.totalReminders,
+      photoUrl: photoUrl ?? this.photoUrl,
+      trialStartDate: trialStartDate ?? this.trialStartDate,
     );
   }
 
@@ -105,6 +115,8 @@ class UserModel extends HiveObject {
         'totalNotes': totalNotes,
         'totalExpenses': totalExpenses,
         'totalReminders': totalReminders,
+        'photoUrl': photoUrl,
+        'trialStartDate': trialStartDate?.toIso8601String(),
       };
 
   factory UserModel.fromJson(Map<String, dynamic> json) => UserModel(
@@ -126,5 +138,9 @@ class UserModel extends HiveObject {
         totalNotes: json['totalNotes'] as int? ?? 0,
         totalExpenses: json['totalExpenses'] as int? ?? 0,
         totalReminders: json['totalReminders'] as int? ?? 0,
+        photoUrl: json['photoUrl'] as String?,
+        trialStartDate: json['trialStartDate'] != null
+            ? DateTime.parse(json['trialStartDate'] as String)
+            : null,
       );
 }

@@ -1,10 +1,10 @@
 import 'dart:async';
+import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:record/record.dart';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:path_provider/path_provider.dart';
-import 'dart:io';
 import '../config/theme.dart';
 import '../services/media_service.dart';
 
@@ -22,8 +22,8 @@ class VoiceRecorderWidget extends StatefulWidget {
 
 class _VoiceRecorderWidgetState extends State<VoiceRecorderWidget>
     with SingleTickerProviderStateMixin {
-  final Record _recorder = Record();
-  final AudioPlayer _player = AudioPlayer();
+  AudioPlayer? _player;
+  final AudioRecorder _recorder = AudioRecorder();
 
   bool _isRecording = false;
   bool _isPlaying = false;
@@ -53,10 +53,11 @@ class _VoiceRecorderWidgetState extends State<VoiceRecorderWidget>
       duration: const Duration(seconds: 4),
     )..repeat(reverse: true);
 
-    _player.onPositionChanged.listen((pos) {
+    _player = AudioPlayer();
+    _player!.onPositionChanged.listen((pos) {
       if (mounted) setState(() => _playPosition = pos);
     });
-    _player.onPlayerComplete.listen((_) {
+    _player!.onPlayerComplete.listen((_) {
       if (mounted) {
         setState(() {
           _isPlaying = false;
@@ -70,16 +71,16 @@ class _VoiceRecorderWidgetState extends State<VoiceRecorderWidget>
   void dispose() {
     _timer?.cancel();
     _amplitudeSub?.cancel();
-    _recorder.dispose();
-    _player.dispose();
+    _player?.dispose();
     _pulseController.dispose();
     _colorShiftController.dispose();
     super.dispose();
   }
 
   Future<void> _startRecording() async {
-    final hasPermission = await _recorder.hasPermission();
-    if (!hasPermission) return;
+    if (!_isSupported) return;
+    final hasPerm = await _recorder.hasPermission();
+    if (!hasPerm) return;
 
     final dir = await getApplicationDocumentsDirectory();
     final audioDir = Directory('${dir.path}/audio');
@@ -89,7 +90,7 @@ class _VoiceRecorderWidgetState extends State<VoiceRecorderWidget>
     final path =
         '${audioDir.path}/voice_${DateTime.now().millisecondsSinceEpoch}.m4a';
 
-    await _recorder.start(path: path);
+    await _recorder.start(const RecordConfig(), path: path);
 
     _amplitudeSub =
         _recorder.onAmplitudeChanged(const Duration(milliseconds: 100)).listen(
@@ -149,13 +150,18 @@ class _VoiceRecorderWidgetState extends State<VoiceRecorderWidget>
   }
 
   Future<void> _playRecording() async {
-    if (_recordedPath == null) return;
-    await _player.play(DeviceFileSource(_recordedPath!));
-    setState(() => _isPlaying = true);
+    if (_recordedPath == null || _player == null) return;
+    try {
+      await _player!.play(DeviceFileSource(_recordedPath!));
+      setState(() => _isPlaying = true);
+    } catch (_) {}
   }
 
   Future<void> _stopPlayback() async {
-    await _player.stop();
+    if (_player == null) return;
+    try {
+      await _player!.stop();
+    } catch (_) {}
     setState(() {
       _isPlaying = false;
       _playPosition = Duration.zero;
@@ -168,6 +174,9 @@ class _VoiceRecorderWidgetState extends State<VoiceRecorderWidget>
     return '$m:$s';
   }
 
+  bool get _isSupported => !kIsWeb && (defaultTargetPlatform == TargetPlatform.android ||
+      defaultTargetPlatform == TargetPlatform.iOS);
+
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -176,6 +185,19 @@ class _VoiceRecorderWidgetState extends State<VoiceRecorderWidget>
     final textPrimary = cs.onSurface;
     final textSecondary = cs.onSurfaceVariant;
     final danger = context.dangerColor;
+
+    if (!_isSupported) {
+      return Container(
+        padding: const EdgeInsets.all(24),
+        child: Center(
+          child: Text(
+            'Voice recording is only available on mobile devices.',
+            style: TextStyle(color: textSecondary),
+            textAlign: TextAlign.center,
+          ),
+        ),
+      );
+    }
 
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -219,7 +241,7 @@ class _VoiceRecorderWidgetState extends State<VoiceRecorderWidget>
         const SizedBox(height: 12),
         Text(
           'Tap to start recording',
-          style: GoogleFonts.inter(fontSize: 14, color: textSecondary),
+          style: TextStyle(fontFamily: 'Satoshi', fontSize: 14, color: textSecondary),
         ),
       ],
     );
@@ -245,7 +267,7 @@ class _VoiceRecorderWidgetState extends State<VoiceRecorderWidget>
         const SizedBox(height: 12),
         Text(
           'Tap to stop',
-          style: GoogleFonts.inter(
+          style: TextStyle(fontFamily: 'Satoshi', 
             fontSize: 14,
             color: danger,
             fontWeight: FontWeight.w500,
@@ -256,7 +278,7 @@ class _VoiceRecorderWidgetState extends State<VoiceRecorderWidget>
         const SizedBox(height: 12),
         Text(
           _formatDuration(_elapsedSeconds),
-          style: GoogleFonts.inter(
+          style: TextStyle(fontFamily: 'Satoshi', 
             fontSize: 32,
             fontWeight: FontWeight.w300,
             color: textPrimary,
@@ -347,7 +369,7 @@ class _VoiceRecorderWidgetState extends State<VoiceRecorderWidget>
                       children: [
                         Text(
                           'Voice Note',
-                          style: GoogleFonts.inter(
+                          style: TextStyle(fontFamily: 'Satoshi', 
                             fontSize: 14,
                             fontWeight: FontWeight.w600,
                             color: textPrimary,
@@ -359,7 +381,7 @@ class _VoiceRecorderWidgetState extends State<VoiceRecorderWidget>
                               _isPlaying
                                   ? _playPosition.inSeconds
                                   : _recordedDuration.inSeconds),
-                          style: GoogleFonts.inter(
+                          style: TextStyle(fontFamily: 'Satoshi', 
                             fontSize: 12,
                             color: textSecondary,
                           ),
@@ -370,7 +392,7 @@ class _VoiceRecorderWidgetState extends State<VoiceRecorderWidget>
                   Text(
                     MediaService.instance
                         .getFileSizeFormatted(_recordedPath!),
-                    style: GoogleFonts.inter(
+                    style: TextStyle(fontFamily: 'Satoshi', 
                       fontSize: 12,
                       color: textSecondary,
                     ),
@@ -401,7 +423,7 @@ class _VoiceRecorderWidgetState extends State<VoiceRecorderWidget>
           },
           child: Text(
             'Record again',
-            style: GoogleFonts.inter(
+            style: TextStyle(fontFamily: 'Satoshi', 
               fontSize: 13,
               color: primary,
               decoration: TextDecoration.underline,

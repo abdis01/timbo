@@ -1,30 +1,30 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 class DesignSystemColors {
   // DARK MODE
-  static const darkBackground = Color(0xFF0F1117);
-  static const darkSurface = Color(0xFF1A1D27);
-  static const darkCard = Color(0xFF212435);
-  static const darkPrimary = Color(0xFF4F8EF7);
-  static const darkSecondary = Color(0xFF7C5CFC);
-  static const darkSuccess = Color(0xFF34D399);
-  static const darkDanger = Color(0xFFF87171);
-  static const darkWarning = Color(0xFFFBBF24);
-  static const darkTextPrimary = Color(0xFFF1F5F9);
-  static const darkTextSecondary = Color(0xFF94A3B8);
+  static const darkBackground = Color(0xFF121212);
+  static const darkSurface = Color(0xFF1E1E1E);
+  static const darkCard = Color(0xFF2C2C2C);
+  static const darkPrimary = Color(0xFF4CAF50);
+  static const darkSecondary = Color(0xFF81C784);
+  static const darkSuccess = Color(0xFF66BB6A);
+  static const darkDanger = Color(0xFFEF5350);
+  static const darkWarning = Color(0xFFFFCA28);
+  static const darkTextPrimary = Color(0xFFF5F5F5);
+  static const darkTextSecondary = Color(0xFFBDBDBD);
 
   // LIGHT MODE
-  static const lightBackground = Color(0xFFF8FAFC);
+  static const lightBackground = Color(0xFFF5F5F5);
   static const lightSurface = Color(0xFFFFFFFF);
   static const lightCard = Color(0xFFFFFFFF);
-  static const lightPrimary = Color(0xFF3B82F6);
-  static const lightSecondary = Color(0xFF7C3AED);
-  static const lightSuccess = Color(0xFF10B981);
-  static const lightDanger = Color(0xFFEF4444);
-  static const lightWarning = Color(0xFFF59E0B);
-  static const lightTextPrimary = Color(0xFF0F172A);
-  static const lightTextSecondary = Color(0xFF64748B);
+  static const lightPrimary = Color(0xFF149E53);
+  static const lightSecondary = Color(0xFF2E7D32);
+  static const lightAccent = Color(0xFFC8E6C9);
+  static const lightSuccess = Color(0xFF43A047);
+  static const lightDanger = Color(0xFFE53935);
+  static const lightWarning = Color(0xFFFFA000);
+  static const lightTextPrimary = Color(0xFF1A1A1A);
+  static const lightTextSecondary = Color(0xFF757575);
 }
 
 extension ThemeColors on BuildContext {
@@ -46,42 +46,42 @@ extension ThemeColors on BuildContext {
 }
 
 class AppTypography {
-  static TextStyle displayLarge = GoogleFonts.sora(
+  static TextStyle displayLarge = const TextStyle(fontFamily: 'Satoshi', 
     fontSize: 32,
     fontWeight: FontWeight.w700,
   );
 
-  static TextStyle displayMedium = GoogleFonts.sora(
+  static TextStyle displayMedium = const TextStyle(fontFamily: 'Satoshi', 
     fontSize: 24,
     fontWeight: FontWeight.w600,
   );
 
-  static TextStyle headingLarge = GoogleFonts.sora(
+  static TextStyle headingLarge = const TextStyle(fontFamily: 'Satoshi', 
     fontSize: 20,
     fontWeight: FontWeight.w600,
   );
 
-  static TextStyle headingMedium = GoogleFonts.sora(
+  static TextStyle headingMedium = const TextStyle(fontFamily: 'Satoshi', 
     fontSize: 18,
     fontWeight: FontWeight.w600,
   );
 
-  static TextStyle bodyLarge = GoogleFonts.inter(
+  static TextStyle bodyLarge = const TextStyle(fontFamily: 'Satoshi', 
     fontSize: 16,
     fontWeight: FontWeight.w400,
   );
 
-  static TextStyle bodyMedium = GoogleFonts.inter(
+  static TextStyle bodyMedium = const TextStyle(fontFamily: 'Satoshi', 
     fontSize: 14,
     fontWeight: FontWeight.w400,
   );
 
-  static TextStyle caption = GoogleFonts.inter(
+  static TextStyle caption = const TextStyle(fontFamily: 'Satoshi', 
     fontSize: 12,
     fontWeight: FontWeight.w400,
   );
 
-  static TextStyle label = GoogleFonts.inter(
+  static TextStyle label = const TextStyle(fontFamily: 'Satoshi', 
     fontSize: 13,
     fontWeight: FontWeight.w500,
   );
@@ -159,12 +159,12 @@ class AppShadows {
 }
 
 class CategoryColors {
-  static const note = Color(0xFF4F8EF7);
-  static const expense = Color(0xFFF87171);
-  static const income = Color(0xFF34D399);
-  static const reminder = Color(0xFFFBBF24);
-  static const capture = Color(0xFF7C5CFC);
-  static const video = Color(0xFFF472B6);
+  static const note = Color(0xFF149E53);
+  static const expense = Color(0xFFE53935);
+  static const income = Color(0xFF43A047);
+  static const reminder = Color(0xFFC8E6C9);
+  static const capture = Color(0xFF1A1A1A);
+  static const video = Color(0xFFEC407A);
 }
 
 class AppTheme {
@@ -182,8 +182,8 @@ class AppTheme {
       onSurface: DesignSystemColors.lightTextPrimary,
       onSurfaceVariant: DesignSystemColors.lightTextSecondary,
       surfaceContainerHighest: DesignSystemColors.lightCard,
-      outline: Color(0xFFE2E8F0),
-      outlineVariant: Color(0xFFCBD5E1),
+      outline: Color(0xFFD1D5DB),
+      outlineVariant: Color(0xFFE5E7EB),
     ),
     textTheme: TextTheme(
       displayLarge: AppTypography.displayLarge.copyWith(
@@ -329,8 +329,8 @@ class AppTheme {
       onSurface: DesignSystemColors.darkTextPrimary,
       onSurfaceVariant: DesignSystemColors.darkTextSecondary,
       surfaceContainerHighest: DesignSystemColors.darkCard,
-      outline: Color(0xFF2A2D3A),
-      outlineVariant: Color(0xFF3A3D4A),
+      outline: Color(0xFF2A3A2A),
+      outlineVariant: Color(0xFF3A4A3A),
     ),
     textTheme: TextTheme(
       displayLarge: AppTypography.displayLarge.copyWith(

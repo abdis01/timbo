@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import '../config/theme.dart';
 import '../models/note_model.dart';
@@ -66,7 +65,7 @@ class NoteCard extends StatelessWidget {
                           Expanded(
                             child: Text(
                               note.title.isEmpty ? 'Untitled' : note.title,
-                              style: GoogleFonts.inter(
+                              style: TextStyle(fontFamily: 'Satoshi', 
                                 fontSize: 15,
                                 fontWeight: FontWeight.w600,
                                 color: textPrimary,
@@ -87,7 +86,7 @@ class NoteCard extends StatelessWidget {
                         const SizedBox(height: 4),
                         Text(
                           note.content,
-                          style: GoogleFonts.inter(
+                          style: TextStyle(fontFamily: 'Satoshi', 
                             fontSize: 13,
                             color: textSecondary,
                           ),
@@ -100,7 +99,7 @@ class NoteCard extends StatelessWidget {
                         children: [
                           Text(
                             DateFormat('MMM d, yyyy').format(note.updatedAt),
-                            style: GoogleFonts.inter(
+                            style: TextStyle(fontFamily: 'Satoshi', 
                               fontSize: 11,
                               color: textSecondary.withValues(alpha: 0.7),
                             ),
@@ -118,7 +117,7 @@ class NoteCard extends StatelessWidget {
                                   const SizedBox(width: 2),
                                   Text(
                                     '${note.mediaPaths.length}',
-                                    style: GoogleFonts.inter(
+                                    style: TextStyle(fontFamily: 'Satoshi', 
                                       fontSize: 11,
                                       color: textSecondary.withValues(alpha: 0.7),
                                     ),

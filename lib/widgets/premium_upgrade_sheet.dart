@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
+import 'package:flutter/services.dart';
 import '../config/theme.dart';
+import '../config/constants.dart';
 
 class PremiumUpgradeData {
   final IconData icon;
@@ -10,11 +11,11 @@ class PremiumUpgradeData {
 }
 
 class PremiumUpgradeSheet extends StatelessWidget {
-  final VoidCallback onJoinWaitlist;
+  final VoidCallback onSubscribe;
 
   const PremiumUpgradeSheet({
     super.key,
-    required this.onJoinWaitlist,
+    required this.onSubscribe,
   });
 
   @override
@@ -25,7 +26,7 @@ class PremiumUpgradeSheet extends StatelessWidget {
     final textSecondary = cs.onSurfaceVariant;
 
     const comparisons = [
-      _ComparisonData('AI Conversations', '5/day', '50/day'),
+      _ComparisonData('AI Conversations', '5/day', 'Unlimited'),
       _ComparisonData('Insights', '1/day', 'All unlocked'),
       _ComparisonData('Quick Captures', '20/day', 'Unlimited'),
       _ComparisonData('Cloud Sync', '\u2717', '\u2713'),
@@ -33,20 +34,20 @@ class PremiumUpgradeSheet extends StatelessWidget {
     ];
 
     final features = [
-      PremiumUpgradeData(Icons.chat_rounded, 'Unlimited AI Conversations',
+      const PremiumUpgradeData(Icons.psychology_rounded, 'Unlimited AI Conversations',
           'Chat with Timbo as much as you want'),
-      PremiumUpgradeData(Icons.insights_rounded, 'Advanced Finance Insights',
+      const PremiumUpgradeData(Icons.insights_rounded, 'Advanced Finance Insights',
           'Detailed spending analysis and trends'),
-      PremiumUpgradeData(Icons.cloud_rounded, 'Cloud Backup & Sync',
+      const PremiumUpgradeData(Icons.cloud_rounded, 'Cloud Backup & Sync',
           'Your data safe across all devices'),
-      PremiumUpgradeData(Icons.auto_awesome_rounded, 'Priority Insights',
+      const PremiumUpgradeData(Icons.psychology_rounded, 'Priority Insights',
           'Auto-refreshed daily with smart suggestions'),
-      PremiumUpgradeData(Icons.bolt_rounded, 'Unlimited Quick Captures',
+      const PremiumUpgradeData(Icons.bolt_rounded, 'Unlimited Quick Captures',
           'Capture anything, anytime, no limits'),
     ];
 
     return Container(
-      height: MediaQuery.of(context).size.height * 0.75,
+      height: MediaQuery.of(context).size.height * 0.8,
       decoration: BoxDecoration(
         color: cs.surface,
         borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
@@ -68,7 +69,7 @@ class PremiumUpgradeSheet extends StatelessWidget {
           const SizedBox(height: 12),
           Text(
             'Timbo Premium',
-            style: GoogleFonts.sora(
+            style: TextStyle(fontFamily: 'Satoshi', 
               fontSize: 24,
               fontWeight: FontWeight.w700,
               color: textPrimary,
@@ -77,7 +78,16 @@ class PremiumUpgradeSheet extends StatelessWidget {
           const SizedBox(height: 4),
           Text(
             'Unlock the full Timbo experience',
-            style: GoogleFonts.inter(fontSize: 14, color: textSecondary),
+            style: TextStyle(fontFamily: 'Satoshi', fontSize: 14, color: textSecondary),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'TZS ${AppConstants.premiumPrice.toStringAsFixed(0)}/month',
+            style: TextStyle(fontFamily: 'Satoshi', 
+              fontSize: 24,
+              fontWeight: FontWeight.w700,
+              color: gold,
+            ),
           ),
           const SizedBox(height: 20),
           _ComparisonTable(comparisons: comparisons, gold: gold, cs: cs),
@@ -100,12 +110,12 @@ class PremiumUpgradeSheet extends StatelessWidget {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(f.title,
-                              style: GoogleFonts.inter(
+                              style: TextStyle(fontFamily: 'Satoshi', 
                                   fontSize: 14,
                                   fontWeight: FontWeight.w500,
                                   color: textPrimary)),
                           Text(f.subtitle,
-                              style: GoogleFonts.inter(
+                              style: TextStyle(fontFamily: 'Satoshi', 
                                   fontSize: 12, color: textSecondary)),
                         ],
                       ),
@@ -116,7 +126,7 @@ class PremiumUpgradeSheet extends StatelessWidget {
             ),
           ),
           Padding(
-            padding: const EdgeInsets.fromLTRB(24, 8, 24, 8),
+            padding: const EdgeInsets.fromLTRB(24, 8, 24, 4),
             child: SizedBox(
               width: double.infinity,
               height: 48,
@@ -128,7 +138,10 @@ class PremiumUpgradeSheet extends StatelessWidget {
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: ElevatedButton(
-                  onPressed: onJoinWaitlist,
+                  onPressed: () {
+                    HapticFeedback.mediumImpact();
+                    onSubscribe();
+                  },
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.transparent,
                     foregroundColor: Colors.white,
@@ -137,13 +150,22 @@ class PremiumUpgradeSheet extends StatelessWidget {
                       borderRadius: BorderRadius.circular(12),
                     ),
                   ),
-                  child: Text(
-                    'Coming Soon — Join Waitlist',
-                    style: GoogleFonts.inter(
-                        fontSize: 15, fontWeight: FontWeight.w600),
-                  ),
+                    child: Text(
+                      'Subscribe — TZS ${AppConstants.premiumPrice.toStringAsFixed(0)}/mo',
+                      style: TextStyle(fontFamily: 'Satoshi', 
+                          fontSize: 15, fontWeight: FontWeight.w600),
+                    ),
                 ),
               ),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(24, 0, 24, 4),
+            child: Text(
+              'Pay with Card, Mobile Money (M-Pesa, TigoPesa) or Bank Transfer',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontFamily: 'Satoshi', 
+                  fontSize: 11, color: Colors.grey),
             ),
           ),
           Padding(
@@ -151,7 +173,7 @@ class PremiumUpgradeSheet extends StatelessWidget {
             child: TextButton(
               onPressed: () => Navigator.pop(context),
               child: Text('Maybe Later',
-                  style: GoogleFonts.inter(
+                  style: TextStyle(fontFamily: 'Satoshi', 
                       fontSize: 13, color: textSecondary)),
             ),
           ),
@@ -209,11 +231,11 @@ class _ComparisonTable extends StatelessWidget {
                             fontWeight: FontWeight.w600,
                             color: Colors.grey)),
                   ),
-                  Expanded(
+                  const Expanded(
                     flex: 1,
                     child: Text('You',
                         textAlign: TextAlign.center,
-                        style: GoogleFonts.inter(
+                        style: TextStyle(fontFamily: 'Satoshi', 
                             fontSize: 12,
                             fontWeight: FontWeight.w600,
                             color: Colors.grey)),
@@ -229,15 +251,15 @@ class _ComparisonTable extends StatelessWidget {
                             color: gold,
                             borderRadius: BorderRadius.circular(4),
                           ),
-                          child: Text('Premium',
-                              style: GoogleFonts.inter(
+                          child: const Text('Premium',
+                              style: TextStyle(fontFamily: 'Satoshi', 
                                   fontSize: 11,
                                   fontWeight: FontWeight.w700,
                                   color: Colors.black)),
                         ),
                         const SizedBox(height: 2),
                         Text('Most Popular',
-                            style: GoogleFonts.inter(
+                            style: TextStyle(fontFamily: 'Satoshi', 
                                 fontSize: 9,
                                 fontWeight: FontWeight.w500,
                                 color: gold)),
@@ -262,21 +284,21 @@ class _ComparisonTable extends StatelessWidget {
                       Expanded(
                         flex: 2,
                         child: Text(c.feature,
-                            style: GoogleFonts.inter(
+                            style: TextStyle(fontFamily: 'Satoshi', 
                                 fontSize: 13, color: cs.onSurface)),
                       ),
                       Expanded(
                         flex: 1,
                         child: Text(c.free,
                             textAlign: TextAlign.center,
-                            style: GoogleFonts.inter(
+                            style: const TextStyle(fontFamily: 'Satoshi', 
                                 fontSize: 13, color: Colors.grey)),
                       ),
                       Expanded(
                         flex: 1,
                         child: Text(c.premium,
                             textAlign: TextAlign.center,
-                            style: GoogleFonts.inter(
+                            style: TextStyle(fontFamily: 'Satoshi', 
                                 fontSize: 13,
                                 fontWeight: FontWeight.w600,
                                 color: gold)),

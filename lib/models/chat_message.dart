@@ -1,9 +1,17 @@
+import 'package:hive/hive.dart';
 import 'package:uuid/uuid.dart';
 
-class ChatMessage {
+part 'chat_message.g.dart';
+
+@HiveType(typeId: 6)
+class ChatMessage extends HiveObject {
+  @HiveField(0)
   final String id;
+  @HiveField(1)
   final String content;
+  @HiveField(2)
   final bool isUser;
+  @HiveField(3)
   final DateTime timestamp;
 
   ChatMessage({

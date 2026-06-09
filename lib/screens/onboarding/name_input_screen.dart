@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
@@ -25,15 +24,19 @@ class _NameInputScreenState extends State<NameInputScreen> {
 
     setState(() => _isLoading = true);
 
+    final prefs = await SharedPreferences.getInstance();
+    final shakeEnabled = prefs.getBool('shake_to_capture_enabled') ?? false;
+
     final user = UserModel(
       id: const Uuid().v4(),
       name: name,
+      shakeToCapture: shakeEnabled,
     );
 
     await HiveService.instance.saveUser(user);
+    if (!mounted) return;
     await context.read<UserProvider>().loadUser();
 
-    final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('onboarding_complete', true);
 
     if (!mounted) return;
@@ -62,7 +65,7 @@ class _NameInputScreenState extends State<NameInputScreen> {
               const SizedBox(height: 16),
               Text(
                 'Timbo',
-                style: GoogleFonts.sora(
+                style: TextStyle(fontFamily: 'Satoshi', 
                   fontSize: 32,
                   fontWeight: FontWeight.w700,
                   color: cs.primary,
@@ -71,7 +74,7 @@ class _NameInputScreenState extends State<NameInputScreen> {
               const SizedBox(height: 48),
               Text(
                 "Hi! I'm Timbo.\nWhat should I call you?",
-                style: GoogleFonts.sora(
+                style: TextStyle(fontFamily: 'Satoshi', 
                   fontSize: 20,
                   fontWeight: FontWeight.w600,
                   color: cs.onSurface,
@@ -84,13 +87,13 @@ class _NameInputScreenState extends State<NameInputScreen> {
                 controller: _controller,
                 autofocus: true,
                 textCapitalization: TextCapitalization.words,
-                style: GoogleFonts.inter(
+                style: TextStyle(fontFamily: 'Satoshi', 
                   fontSize: 18,
                   color: cs.onSurface,
                 ),
                 decoration: InputDecoration(
                   hintText: 'Your name',
-                  hintStyle: GoogleFonts.inter(
+                  hintStyle: TextStyle(fontFamily: 'Satoshi', 
                     color: cs.onSurfaceVariant.withValues(alpha: 0.5),
                   ),
                   filled: true,
@@ -133,9 +136,9 @@ class _NameInputScreenState extends State<NameInputScreen> {
                             color: Colors.white,
                           ),
                         )
-                      : Text(
+                      : const Text(
                           "Let's Go",
-                          style: GoogleFonts.inter(
+                          style: TextStyle(fontFamily: 'Satoshi', 
                             fontSize: 16,
                             fontWeight: FontWeight.w600,
                           ),

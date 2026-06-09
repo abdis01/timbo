@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
+import 'package:flutter/foundation.dart';
 import 'package:provider/provider.dart';
 import '../../config/theme.dart';
 import '../../config/routes.dart';
@@ -9,10 +9,14 @@ import '../../services/firebase_service.dart';
 import '../../services/notification_service.dart';
 import '../../providers/user_provider.dart';
 import '../../config/constants.dart';
-import '../../widgets/premium_upgrade_sheet.dart';
+import '../../widgets/subscription_utils.dart';
 import '../../widgets/bottom_nav.dart';
 import 'dart:async';
+import 'dart:io';
+import 'package:image_picker/image_picker.dart';
 import '../../services/sync_service.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 // TODO: Add biometric authentication
 // TODO: Implement Stripe payment for premium
 
@@ -30,8 +34,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _quickAccessNotification = false;
   bool _cloudSync = false;
   String _defaultCaptureType = 'Note';
-  StreamSubscription? _syncSub;
-
   @override
   void initState() {
     super.initState();
@@ -47,7 +49,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   void dispose() {
     SyncService.instance.removeListener(_onSyncChanged);
-    _syncSub?.cancel();
     super.dispose();
   }
 
@@ -112,15 +113,44 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
+  Future<void> _pickImage() async {
+    try {
+      final picker = ImagePicker();
+      final picked = await picker.pickImage(
+        source: ImageSource.gallery,
+        maxWidth: 512,
+        maxHeight: 512,
+      );
+      if (picked != null) {
+        final user = HiveService.instance.getUser();
+        if (user != null) {
+          user.photoUrl = picked.path;
+          await HiveService.instance.saveUser(user);
+          if (mounted) {
+            context.read<UserProvider>().loadUser();
+            setState(() {});
+          }
+        }
+      }
+    } catch (_) {}
+  }
+
   Future<void> _signOut() async {
     try {
-      await FirebaseService.instance.signOut();
+      if (FirebaseService.instance.isAvailable) {
+        await FirebaseService.instance.signOut();
+      }
     } catch (_) {}
+    try {
+      await HiveService.instance.clearUser();
+    } catch (_) {}
+    if (!mounted) return;
     try {
       await Provider.of<UserProvider>(context, listen: false).logout();
     } catch (_) {}
+    if (!mounted) return;
     if (mounted) {
-      Navigator.pushNamedAndRemoveUntil(context, '/splash', (_) => false);
+      Navigator.pushNamedAndRemoveUntil(context, AppRoutes.splash, (_) => false);
     }
   }
 
@@ -164,10 +194,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
         return Scaffold(
           backgroundColor: cs.surface,
-          bottomNavigationBar: AppBottomNav(activeRoute: AppRoutes.settings),
+          bottomNavigationBar: const AppBottomNav(activeRoute: AppRoutes.settings),
           appBar: AppBar(
+            automaticallyImplyLeading: false,
             title: Text('Settings',
-                style: GoogleFonts.sora(
+                style: TextStyle(fontFamily: 'Satoshi', 
                     fontSize: 20,
                     fontWeight: FontWeight.w600,
                     color: cs.onSurface)),
@@ -175,47 +206,82 @@ class _SettingsScreenState extends State<SettingsScreen> {
           body: ListView(
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
             children: [
-              _profileCard(user, isPremium, cs.onSurface, cs.onSurfaceVariant,
-                  cardColor),
+              _animatedTile(0, _profileCard(user, isPremium, cs.onSurface, cs.onSurfaceVariant,
+                  cardColor)),
               const SizedBox(height: 24),
-              _sectionLabel('APPEARANCE', cs.onSurfaceVariant),
-              const SizedBox(height: 8),
-              _darkModeTile(userProvider, cs.onSurface, cs.onSurfaceVariant, cardColor),
+              _animatedTile(1, Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _sectionLabel('APPEARANCE', cs.onSurfaceVariant),
+                  const SizedBox(height: 8),
+                  _darkModeTile(userProvider, cs.onSurface, cs.onSurfaceVariant, cardColor),
+                ],
+              )),
               const SizedBox(height: 24),
-              _sectionLabel('QUICK CAPTURE', cs.onSurfaceVariant),
-              const SizedBox(height: 8),
-              _shakeTile(userProvider, cs.onSurface, cs.onSurfaceVariant, cardColor),
-              _captureTypeTile(cs.onSurface, cs.onSurfaceVariant, cardColor),
-              _captureLimitTile(cs.onSurface, cs.onSurfaceVariant, cardColor),
+              _animatedTile(2, Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _sectionLabel('QUICK CAPTURE', cs.onSurfaceVariant),
+                  const SizedBox(height: 8),
+                  _shakeTile(userProvider, cs.onSurface, cs.onSurfaceVariant, cardColor),
+                  _captureTypeTile(cs.onSurface, cs.onSurfaceVariant, cardColor),
+                  _captureLimitTile(cs.onSurface, cs.onSurfaceVariant, cardColor),
+                ],
+              )),
               const SizedBox(height: 24),
-              _sectionLabel('AI & INSIGHTS', cs.onSurfaceVariant),
-              const SizedBox(height: 8),
-              _aiUsageTile(aiUsed, aiLimit, cs.onSurface, cs.onSurfaceVariant,
-                  cardColor),
-              if (!isPremium) ...[
-                const SizedBox(height: 4),
-                _upgradeButton(cs.onSurface, cs.onSurfaceVariant, cardColor),
-              ],
+              _animatedTile(3, Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _sectionLabel('AI & INSIGHTS', cs.onSurfaceVariant),
+                  const SizedBox(height: 8),
+                  _aiUsageTile(aiUsed, aiLimit, cs.onSurface, cs.onSurfaceVariant,
+                      cardColor),
+                  if (!isPremium) ...[
+                    const SizedBox(height: 4),
+                    _upgradeButton(cs.onSurface, cs.onSurfaceVariant, cardColor),
+                  ],
+                ],
+              )),
               const SizedBox(height: 24),
-              _sectionLabel('NOTIFICATIONS', cs.onSurfaceVariant),
-              const SizedBox(height: 8),
-              _notificationsTile(cs.onSurface, cs.onSurfaceVariant, cardColor),
-              _reminderNotifTile(cs.onSurface, cs.onSurfaceVariant, cardColor),
-              _aiNotifTile(cs.onSurface, cs.onSurfaceVariant, cardColor),
-              _quickAccessTile(cs.onSurface, cs.onSurfaceVariant, cardColor),
+              _animatedTile(4, Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _sectionLabel('NOTIFICATIONS', cs.onSurfaceVariant),
+                  const SizedBox(height: 8),
+                  _notificationsTile(cs.onSurface, cs.onSurfaceVariant, cardColor),
+                  _reminderNotifTile(cs.onSurface, cs.onSurfaceVariant, cardColor),
+                  _aiNotifTile(cs.onSurface, cs.onSurfaceVariant, cardColor),
+                  _quickAccessTile(cs.onSurface, cs.onSurfaceVariant, cardColor),
+                ],
+              )),
               const SizedBox(height: 24),
-              _sectionLabel('CLOUD SYNC', cs.onSurfaceVariant),
-              const SizedBox(height: 8),
-              _cloudSyncTile(isPremium, cs.onSurface, cs.onSurfaceVariant, cardColor),
+              _animatedTile(5, Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _sectionLabel('CLOUD SYNC', cs.onSurfaceVariant),
+                  const SizedBox(height: 8),
+                  _cloudSyncTile(isPremium, cs.onSurface, cs.onSurfaceVariant, cardColor),
+                ],
+              )),
               const SizedBox(height: 24),
-              _sectionLabel('ACCOUNT', cs.onSurfaceVariant),
-              const SizedBox(height: 8),
-              _signOutTile(cs.onSurface, cs.onSurfaceVariant, cardColor),
-              _deleteTile(cs.onSurface, cs.onSurfaceVariant, cardColor),
+              _animatedTile(6, Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _sectionLabel('ACCOUNT', cs.onSurfaceVariant),
+                  const SizedBox(height: 8),
+                  _signOutTile(cs.onSurface, cs.onSurfaceVariant, cardColor),
+                  _deleteTile(cs.onSurface, cs.onSurfaceVariant, cardColor),
+                ],
+              )),
               const SizedBox(height: 24),
-              _sectionLabel('ABOUT', cs.onSurfaceVariant),
-              const SizedBox(height: 8),
-              _aboutTile(cs.onSurface, cs.onSurfaceVariant, cardColor),
+              _animatedTile(7, Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _sectionLabel('ABOUT', cs.onSurfaceVariant),
+                  const SizedBox(height: 8),
+                  _aboutTile(cs.onSurface, cs.onSurfaceVariant, cardColor),
+                ],
+              )),
             ],
           ),
         );
@@ -232,6 +298,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   ) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final initials = _getInitials(user?.name ?? '');
+    final photoPath = user?.photoUrl as String?;
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -241,16 +308,41 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ),
       child: Row(
         children: [
-          CircleAvatar(
-            radius: 28,
-            backgroundColor: context.primaryColor,
-            child: Text(
-              initials,
-              style: GoogleFonts.sora(
-                fontSize: 20,
-                fontWeight: FontWeight.w600,
-                color: Colors.white,
-              ),
+          GestureDetector(
+            onTap: _pickImage,
+            child: Stack(
+              children: [
+                CircleAvatar(
+                  radius: 28,
+                  backgroundColor: context.primaryColor,
+                  backgroundImage: photoPath != null && photoPath.isNotEmpty
+                      ? (kIsWeb ? NetworkImage(photoPath) : FileImage(File(photoPath)) as ImageProvider)
+                      : null,
+                  child: photoPath == null || photoPath.isEmpty
+                      ? Text(
+                          initials,
+                          style: const TextStyle(fontFamily: 'Satoshi', 
+                            fontSize: 20,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.white,
+                          ),
+                        )
+                      : null,
+                ),
+                Positioned(
+                  bottom: 0,
+                  right: 0,
+                  child: Container(
+                    padding: const EdgeInsets.all(4),
+                    decoration: BoxDecoration(
+                      color: context.primaryColor,
+                      shape: BoxShape.circle,
+                      border: Border.all(color: cardColor, width: 2),
+                    ),
+                    child: const Icon(Icons.edit_rounded, size: 12, color: Colors.white),
+                  ),
+                ),
+              ],
             ),
           ),
           const SizedBox(width: 14),
@@ -264,7 +356,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     children: [
                       Text(
                         user?.name ?? 'Your Name',
-                        style: GoogleFonts.inter(
+                        style: TextStyle(fontFamily: 'Satoshi', 
                           fontSize: 16,
                           fontWeight: FontWeight.w600,
                           color: textPrimary,
@@ -281,7 +373,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     padding: const EdgeInsets.only(top: 2),
                     child: Text(
                       user.email!,
-                      style: GoogleFonts.inter(
+                      style: TextStyle(fontFamily: 'Satoshi', 
                           fontSize: 13, color: textSecondary),
                     ),
                   ),
@@ -305,7 +397,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           const SizedBox(width: 4),
                           Text(
                             'PREMIUM',
-                            style: GoogleFonts.inter(
+                            style: TextStyle(fontFamily: 'Satoshi', 
                               fontSize: 10,
                               fontWeight: FontWeight.w700,
                               color: context.warningColor,
@@ -375,7 +467,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       padding: const EdgeInsets.only(left: 4),
       child: Text(
         label,
-        style: GoogleFonts.inter(
+        style: TextStyle(fontFamily: 'Satoshi', 
           fontSize: 11,
           fontWeight: FontWeight.w700,
           letterSpacing: 1.2,
@@ -403,11 +495,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
       child: ListTile(
         onTap: onTap,
         title: Text(title,
-            style: GoogleFonts.inter(
+            style: TextStyle(fontFamily: 'Satoshi', 
                 fontSize: 14, fontWeight: FontWeight.w500, color: textPrimary)),
         subtitle: subtitle != null
             ? Text(subtitle,
-                style: GoogleFonts.inter(fontSize: 12, color: textSecondary))
+                style: TextStyle(fontFamily: 'Satoshi', fontSize: 12, color: textSecondary))
             : null,
         trailing: trailing,
         contentPadding: const EdgeInsets.symmetric(horizontal: 14),
@@ -427,7 +519,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       trailing: Switch.adaptive(
         value: provider.isDarkMode,
         onChanged: (_) => _toggleDarkMode(provider),
-        activeColor: context.primaryColor,
+        activeThumbColor: context.primaryColor,
       ),
     );
   }
@@ -443,7 +535,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       trailing: Switch.adaptive(
         value: provider.user?.shakeToCapture ?? false,
         onChanged: (v) => _toggleSetting('shakeToCapture', v, provider),
-        activeColor: context.primaryColor,
+        activeThumbColor: context.primaryColor,
       ),
     );
   }
@@ -498,7 +590,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ),
         child: Text(
           isPremium ? 'Unlimited' : 'Free',
-          style: GoogleFonts.inter(
+          style: TextStyle(fontFamily: 'Satoshi', 
             fontSize: 11,
             fontWeight: FontWeight.w600,
             color: isPremium
@@ -523,7 +615,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text('AI Interactions',
-              style: GoogleFonts.inter(
+              style: TextStyle(fontFamily: 'Satoshi', 
                   fontSize: 14,
                   fontWeight: FontWeight.w500,
                   color: textPrimary)),
@@ -545,11 +637,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
           Row(
             children: [
               Text('$used of $limit used today',
-                  style: GoogleFonts.inter(
+                  style: TextStyle(fontFamily: 'Satoshi', 
                       fontSize: 12, color: textSecondary)),
               const Spacer(),
               Text('Resets at midnight',
-                  style: GoogleFonts.inter(
+                  style: TextStyle(fontFamily: 'Satoshi', 
                       fontSize: 12, color: textSecondary.withValues(alpha: 0.6))),
             ],
           ),
@@ -577,10 +669,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
             Icon(Icons.workspace_premium_rounded,
                 size: 20, color: context.warningColor),
             const SizedBox(width: 10),
-            Expanded(
+            const Expanded(
               child: Text(
-                'Upgrade to Premium',
-                style: GoogleFonts.inter(
+                'Unlock Premium — Try Free Now',
+                style: TextStyle(fontFamily: 'Satoshi', 
                   fontSize: 14,
                   fontWeight: FontWeight.w600,
                   color: Colors.white,
@@ -610,7 +702,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             NotificationService.requestPermissions();
           }
         },
-        activeColor: context.primaryColor,
+        activeThumbColor: context.primaryColor,
       ),
     );
   }
@@ -626,7 +718,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         value: _reminderNotifications,
         onChanged: (v) =>
             setState(() => _reminderNotifications = v),
-        activeColor: context.primaryColor,
+        activeThumbColor: context.primaryColor,
       ),
     );
   }
@@ -641,7 +733,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         value: _aiInsightNotifications,
         onChanged: (v) =>
             setState(() => _aiInsightNotifications = v),
-        activeColor: context.primaryColor,
+        activeThumbColor: context.primaryColor,
       ),
     );
   }
@@ -663,7 +755,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             await NotificationService.cancelPersistentQuickCaptureNotification();
           }
         },
-        activeColor: context.primaryColor,
+        activeThumbColor: context.primaryColor,
       ),
     );
   }
@@ -686,7 +778,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               const SizedBox(width: 10),
               Expanded(
                 child: Text('Cloud Sync',
-                    style: GoogleFonts.inter(
+                    style: TextStyle(fontFamily: 'Satoshi', 
                         fontSize: 14,
                         fontWeight: FontWeight.w500,
                         color: textPrimary.withValues(alpha: 0.5))),
@@ -725,7 +817,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   await syncService.performSync();
                 }
               },
-              activeColor: context.primaryColor,
+              activeThumbColor: context.primaryColor,
             ),
           ),
           if (_cloudSync) ...[
@@ -753,7 +845,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                 ? 'Idle'
                                 : '')
                             : syncService.statusMessage,
-                        style: GoogleFonts.inter(
+                        style: TextStyle(fontFamily: 'Satoshi', 
                             fontSize: 12,
                             color: textSecondary.withValues(alpha: 0.6))),
                   ),
@@ -768,14 +860,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       size: 14, color: textSecondary.withValues(alpha: 0.6)),
                   const SizedBox(width: 6),
                   Text('Last synced: ${syncService.formattedLastSync}',
-                      style: GoogleFonts.inter(
+                      style: TextStyle(fontFamily: 'Satoshi', 
                           fontSize: 12,
                           color: textSecondary.withValues(alpha: 0.6))),
                   const Spacer(),
                   GestureDetector(
                     onTap: _syncNow,
                     child: Text('Sync Now',
-                        style: GoogleFonts.inter(
+                        style: TextStyle(fontFamily: 'Satoshi', 
                             fontSize: 12,
                             fontWeight: FontWeight.w600,
                             color: context.primaryColor)),
@@ -788,7 +880,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               padding: const EdgeInsets.fromLTRB(14, 0, 14, 10),
               child: Text(
                   'Premium feature — enable cloud sync to keep your data safe',
-                  style: GoogleFonts.inter(
+                  style: TextStyle(fontFamily: 'Satoshi', 
                       fontSize: 12,
                       color: textSecondary.withValues(alpha: 0.5))),
             ),
@@ -821,6 +913,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
         onTap: () async {
           final confirmed = await _confirmDelete();
           if (confirmed && mounted) {
+            if (FirebaseService.instance.isAvailable) {
+              try {
+                final userId = FirebaseAuth.instance.currentUser?.uid;
+                if (userId != null) {
+                  await FirebaseFirestore.instance.collection('users').doc(userId).delete();
+                }
+                await FirebaseAuth.instance.currentUser?.delete();
+              } catch (_) {}
+            }
             try {
               await HiveService.instance.clearAll();
             } catch (_) {}
@@ -831,7 +932,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           }
         },
         title: Text('Delete Account',
-            style: GoogleFonts.inter(
+            style: TextStyle(fontFamily: 'Satoshi', 
                 fontSize: 14,
                 fontWeight: FontWeight.w500,
                 color: context.dangerColor)),
@@ -858,20 +959,39 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   size: 18, color: textSecondary),
               const SizedBox(width: 10),
               Text('Version',
-                  style: GoogleFonts.inter(
+                  style: TextStyle(fontFamily: 'Satoshi', 
                       fontSize: 14,
                       fontWeight: FontWeight.w500,
                       color: textPrimary)),
               const Spacer(),
               Text('Timbo v1.0.0',
-                  style: GoogleFonts.inter(
+                  style: TextStyle(fontFamily: 'Satoshi', 
                       fontSize: 13, color: textSecondary)),
             ],
           ),
           const SizedBox(height: 8),
+          GestureDetector(
+            onTap: () => Navigator.pushNamed(context, AppRoutes.privacy),
+            child: Row(
+              children: [
+                Icon(Icons.description_outlined,
+                    size: 16, color: textSecondary),
+                const SizedBox(width: 8),
+                Text('Privacy & Terms',
+                    style: TextStyle(fontFamily: 'Satoshi',
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                        color: textPrimary)),
+                const Spacer(),
+                Icon(Icons.chevron_right_rounded,
+                    size: 18, color: textSecondary),
+              ],
+            ),
+          ),
+          const SizedBox(height: 8),
           Text(
             'Made with ❤️ — Powered by Gemini AI',
-            style: GoogleFonts.inter(
+            style: TextStyle(fontFamily: 'Satoshi', 
                 fontSize: 12, color: textSecondary.withValues(alpha: 0.7)),
           ),
         ],
@@ -879,46 +999,26 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  void _showUpgradeSheet() {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) => PremiumUpgradeSheet(
-        onJoinWaitlist: _joinWaitlist,
-      ),
+  Widget _animatedTile(int index, Widget child) {
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0, end: 1),
+      duration: const Duration(milliseconds: 400),
+      curve: Interval(index * 0.125, 1.0, curve: Curves.easeOutCubic),
+      builder: (context, value, child) {
+        return Opacity(
+          opacity: value,
+          child: Transform.translate(
+            offset: Offset(0, 20 * (1 - value)),
+            child: child,
+          ),
+        );
+      },
+      child: child,
     );
   }
 
-  Future<void> _joinWaitlist() async {
-    final user = HiveService.instance.getUser();
-    final email = user?.email;
-    if (email == null || email.isEmpty) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-              content: Text('Please set your email in profile first')),
-        );
-      }
-      return;
-    }
-    try {
-      await FirebaseService.instance.waitlistSignup(email);
-      if (mounted) {
-        Navigator.pop(context);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-              content:
-                  Text('You\'re on the waitlist! We\'ll notify you.')),
-        );
-      }
-    } catch (_) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Something went wrong. Try again.')),
-        );
-      }
-    }
+  void _showUpgradeSheet() {
+    showUpgradeSheet(context);
   }
 }
 

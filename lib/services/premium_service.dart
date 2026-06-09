@@ -1,5 +1,6 @@
 import '../config/constants.dart';
 import 'hive_service.dart';
+import 'firebase_service.dart';
 
 class PremiumService {
   PremiumService._();
@@ -13,9 +14,10 @@ class PremiumService {
   }
 
   int get aiDailyLimit {
-    return isPremium()
-        ? AppConstants.premiumAiDailyLimit
-        : AppConstants.freeAiDailyLimit;
+    if (isPremium() || HiveService.instance.isTrialActive()) {
+      return AppConstants.premiumAiDailyLimit;
+    }
+    return AppConstants.freeAiDailyLimit;
   }
 
   int getRemainingInteractions() {
@@ -26,10 +28,14 @@ class PremiumService {
   }
 
   bool isAIExhausted() {
-    return getRemainingInteractions() <= 0 && !isPremium();
+    if (!FirebaseService.instance.isAvailable) return true;
+    if (!FirebaseService.instance.isLoggedIn) return true;
+    return getRemainingInteractions() <= 0;
   }
 
   bool canUseAI() {
+    if (!FirebaseService.instance.isAvailable) return false;
+    if (!FirebaseService.instance.isLoggedIn) return false;
     return HiveService.instance.canUserUseAI();
   }
 
@@ -63,22 +69,22 @@ class PremiumService {
     switch (blockedFeature) {
       case 'ai_chat':
         return 'You\'ve used all your free AI conversations today. '
-            'Upgrade to Premium for 50 AI conversations daily!';
+            'Upgrade to Premium for \$${AppConstants.premiumPrice.toStringAsFixed(2)}/month!';
       case 'quick_capture':
         return 'Free users can only capture 20 items per day. '
             'Upgrade to Premium for unlimited captures!';
       case 'cloud_sync':
         return 'Cloud sync is a Premium feature. '
-            'Upgrade to keep your data safe across devices!';
+            'Upgrade for \$${AppConstants.premiumPrice.toStringAsFixed(2)}/month to keep your data safe across devices!';
       case 'insights':
         return 'Advanced insights and analytics are available with Premium. '
-            'Upgrade to unlock them!';
+            'Upgrade for \$${AppConstants.premiumPrice.toStringAsFixed(2)}/month!';
       case 'finance_analysis':
         return 'Spending analysis is available with Premium. '
-            'Upgrade to see detailed insights!';
+            'Upgrade for \$${AppConstants.premiumPrice.toStringAsFixed(2)}/month!';
       default:
-        return 'This feature is available with Premium. '
-            'Upgrade to unlock it!';
+        return 'This feature is available with Premium for '
+            '\$${AppConstants.premiumPrice.toStringAsFixed(2)}/month. Upgrade to unlock it!';
     }
   }
 }

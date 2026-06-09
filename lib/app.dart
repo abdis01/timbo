@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:home_widget/home_widget.dart';
 import 'package:provider/provider.dart';
@@ -27,27 +28,43 @@ class _TimboAppState extends State<TimboApp> with WidgetsBindingObserver {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     NotificationService.navigatorKey = navigatorKey;
-    ShakeService.instance.navigatorKey = navigatorKey;
-    ShakeService.instance.initialize();
+
+    try {
+      ShakeService.instance.navigatorKey = navigatorKey;
+      ShakeService.instance.initialize();
+    } catch (_) {}
+
     SyncService.instance.initialize();
     SyncService.instance.addListener(_onSyncChanged);
-    WidgetService.instance.initialize();
+
+    try {
+      WidgetService.instance.initialize();
+    } catch (_) {}
+
     _listenForWidgetClicks();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _checkInitialLaunch();
-      NotificationService.navigateToPendingRoute();
+      try {
+        NotificationService.navigateToPendingRoute();
+      } catch (_) {}
     });
   }
 
   Future<void> _checkInitialLaunch() async {
-    final uri = await HomeWidget.initiallyLaunchedFromHomeWidget();
-    _handleDeepLink(uri);
+    try {
+      final uri = await HomeWidget.initiallyLaunchedFromHomeWidget();
+      _handleDeepLink(uri);
+    } catch (_) {}
   }
 
   void _listenForWidgetClicks() {
-    HomeWidget.widgetClicked.listen((Uri? uri) {
-      _handleDeepLink(uri);
-    });
+    try {
+      final platform = defaultTargetPlatform;
+      if (platform != TargetPlatform.android && platform != TargetPlatform.iOS) return;
+      HomeWidget.widgetClicked.listen((Uri? uri) {
+        _handleDeepLink(uri);
+      }).onError((_) {});
+    } catch (_) {}
   }
 
   void _handleDeepLink(Uri? uri) {
@@ -83,7 +100,9 @@ class _TimboAppState extends State<TimboApp> with WidgetsBindingObserver {
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    ShakeService.instance.dispose();
+    try {
+      ShakeService.instance.dispose();
+    } catch (_) {}
     SyncService.instance.removeListener(_onSyncChanged);
     super.dispose();
   }
@@ -91,10 +110,14 @@ class _TimboAppState extends State<TimboApp> with WidgetsBindingObserver {
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
-      ShakeService.instance.startListening();
+      try {
+        ShakeService.instance.startListening();
+      } catch (_) {}
     } else if (state == AppLifecycleState.paused ||
         state == AppLifecycleState.inactive) {
-      ShakeService.instance.stopListening();
+      try {
+        ShakeService.instance.stopListening();
+      } catch (_) {}
     }
   }
 
@@ -103,6 +126,8 @@ class _TimboAppState extends State<TimboApp> with WidgetsBindingObserver {
     return Consumer<UserProvider>(
       builder: (context, userProvider, _) {
         return Stack(
+          alignment: Alignment.topLeft,
+          clipBehavior: Clip.none,
           children: [
             MaterialApp(
               navigatorKey: navigatorKey,
@@ -114,24 +139,44 @@ class _TimboAppState extends State<TimboApp> with WidgetsBindingObserver {
                   userProvider.isDarkMode ? ThemeMode.dark : ThemeMode.light,
               initialRoute: AppRoutes.splash,
               onGenerateRoute: AppRoutes.onGenerateRoute,
+              builder: (context, child) {
+                return MediaQuery(
+                  data: MediaQuery.of(context).copyWith(
+                    textScaler: const TextScaler.linear(1.0),
+                  ),
+                  child: child!,
+                );
+              },
             ),
-            if (!_isOnline)
-              Positioned(
-                top: 0,
-                left: 0,
-                right: 0,
-                child: Material(
-                  child: Container(
-                    padding: EdgeInsets.only(top: MediaQuery.of(context).padding.top, bottom: 4),
-                    color: Colors.orange.shade800,
-                    child: const Text(
-                      'No internet connection',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(color: Colors.white, fontSize: 12),
+            Directionality(
+              textDirection: TextDirection.ltr,
+              child: AnimatedSlide(
+                offset: _isOnline ? const Offset(0, -1) : Offset.zero,
+                duration: const Duration(milliseconds: 350),
+                curve: Curves.easeInOut,
+                child: AnimatedOpacity(
+                  opacity: _isOnline ? 0.0 : 1.0,
+                  duration: const Duration(milliseconds: 350),
+                  child: Material(
+                    child: Container(
+                      padding: EdgeInsets.only(top: MediaQuery.of(context).padding.top, bottom: 6),
+                      color: Colors.orange.shade800,
+                      child: const Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.wifi_off_rounded, color: Colors.white, size: 16),
+                          SizedBox(width: 6),
+                          Text(
+                            'No internet connection',
+                            style: TextStyle(color: Colors.white, fontSize: 12),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ),
               ),
+            ),
           ],
         );
       },

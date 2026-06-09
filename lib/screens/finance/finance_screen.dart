@@ -1,8 +1,8 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_slidable/flutter_slidable.dart';
 import 'package:fl_chart/fl_chart.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -13,7 +13,6 @@ import '../../config/routes.dart';
 import '../../providers/finance_provider.dart';
 import '../../models/expense_model.dart';
 import '../../services/premium_service.dart';
-import '../../widgets/premium_lock_widget.dart';
 import '../../widgets/bottom_nav.dart';
 // TODO: Implement Stripe payment for premium
 // TODO: Add export notes to PDF feature
@@ -25,14 +24,31 @@ class FinanceScreen extends StatefulWidget {
   State<FinanceScreen> createState() => _FinanceScreenState();
 }
 
-class _FinanceScreenState extends State<FinanceScreen> {
+class _FinanceScreenState extends State<FinanceScreen>
+    with SingleTickerProviderStateMixin {
   String _filterTab = 'All';
-  double _budgetLimit = 2000;
+  Map<String, double> _categoryBudgets = {};
+  late AnimationController _entryController;
+  int _tappedPieIndex = -1;
+
+  static const _categoryData = [
+    _CategoryData('Food', Icons.restaurant_rounded),
+    _CategoryData('Transport', Icons.directions_car_rounded),
+    _CategoryData('Entertainment', Icons.movie_creation_rounded),
+    _CategoryData('Health', Icons.favorite_rounded),
+    _CategoryData('Shopping', Icons.shopping_bag_rounded),
+    _CategoryData('Other', Icons.category_rounded),
+  ];
 
   @override
   void initState() {
     super.initState();
+    _entryController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 800),
+    );
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      _entryController.forward();
       _loadData();
     });
   }
@@ -40,7 +56,7 @@ class _FinanceScreenState extends State<FinanceScreen> {
   Future<void> _loadData() async {
     try {
       await context.read<FinanceProvider>().loadFinanceData();
-      await _loadBudgetLimit();
+      await _loadCategoryBudgets();
     } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -50,24 +66,36 @@ class _FinanceScreenState extends State<FinanceScreen> {
     }
   }
 
-  Future<void> _loadBudgetLimit() async {
+  @override
+  void dispose() {
+    _entryController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadCategoryBudgets() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      setState(() {
-        _budgetLimit = prefs.getDouble('monthly_budget') ?? 2000;
-      });
+      final data = prefs.getString('category_budgets');
+      if (data != null) {
+        final decoded = Map<String, dynamic>.from(
+          const JsonDecoder().convert(data) as Map,
+        );
+        setState(() {
+          _categoryBudgets = decoded.map((k, v) => MapEntry(k, (v as num).toDouble()));
+        });
+      }
     } catch (_) {}
   }
 
-  Future<void> _saveBudgetLimit(double limit) async {
+  Future<void> _saveCategoryBudgets(Map<String, double> budgets) async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setDouble('monthly_budget', limit);
-      setState(() => _budgetLimit = limit);
+      await prefs.setString('category_budgets', const JsonEncoder().convert(budgets));
+      setState(() => _categoryBudgets = Map.from(budgets));
     } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Couldn't save budget. Please try again.")),
+          const SnackBar(content: Text("Couldn't save category budgets. Please try again.")),
         );
       }
     }
@@ -80,7 +108,7 @@ class _FinanceScreenState extends State<FinanceScreen> {
     return Scaffold(
       backgroundColor: cs.surface,
       appBar: _buildAppBar(cs),
-      bottomNavigationBar: AppBottomNav(activeRoute: AppRoutes.finance),
+      bottomNavigationBar: const AppBottomNav(activeRoute: AppRoutes.finance),
       body: Consumer<FinanceProvider>(
         builder: (context, finance, _) {
           if (finance.isLoading) {
@@ -89,7 +117,9 @@ class _FinanceScreenState extends State<FinanceScreen> {
 
           final filtered = _filteredTransactions(finance);
 
-          return CustomScrollView(
+          return RefreshIndicator(
+            onRefresh: _loadData,
+            child: CustomScrollView(
             slivers: [
               SliverToBoxAdapter(child: _buildSummaryRow(finance)),
               SliverToBoxAdapter(child: _buildPieChart(finance)),
@@ -97,47 +127,50 @@ class _FinanceScreenState extends State<FinanceScreen> {
               SliverToBoxAdapter(child: _buildSpendingAnalysis(finance)),
               SliverToBoxAdapter(child: _buildTransactionHeader(cs)),
               SliverToBoxAdapter(child: _buildFilterTabs(cs)),
-              if (filtered.isEmpty)
-                SliverToBoxAdapter(child: _buildEmptyTransactions(cs))
-              else
-                SliverPadding(
-                  padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
-                  sliver: SliverList(
-                    delegate: SliverChildBuilderDelegate(
-                      (context, i) {
-                        final e = filtered[i];
-                        return Padding(
-                          padding: const EdgeInsets.only(bottom: 6),
-                          child: ClipRRect(
-                            borderRadius: BorderRadius.circular(AppRadius.sm),
-                            child: Slidable(
-                              endActionPane: ActionPane(
-                                motion: const BehindMotion(),
-                                children: [
-                                  SlidableAction(
-                                    onPressed: (_) {
-                                      finance.deleteExpense(e.id);
-                                      HapticFeedback.mediumImpact();
-                                    },
-                                    backgroundColor: context.dangerColor,
-                                    foregroundColor: Colors.white,
-                                    icon: Icons.delete_outline_rounded,
-                                    label: 'Delete',
-                                    borderRadius: BorderRadius.circular(AppRadius.sm),
+              SliverToBoxAdapter(
+                child: AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 300),
+                  child: filtered.isEmpty
+                      ? _buildEmptyTransactions(cs)
+                      : Padding(
+                          key: ValueKey('${finance.selectedYear}-${finance.selectedMonth}-$_filterTab'),
+                          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
+                          child: Column(
+                            children: List.generate(filtered.length, (i) {
+                              final e = filtered[i];
+                              return Padding(
+                                padding: const EdgeInsets.only(bottom: 6),
+                                child: ClipRRect(
+                                  borderRadius: BorderRadius.circular(AppRadius.sm),
+                                  child: Slidable(
+                                    endActionPane: ActionPane(
+                                      motion: const BehindMotion(),
+                                      children: [
+                                        SlidableAction(
+                                          onPressed: (_) {
+                                            finance.deleteExpense(e.id);
+                                            try { HapticFeedback.mediumImpact(); } catch (_) {}
+                                          },
+                                          backgroundColor: context.dangerColor,
+                                          foregroundColor: Colors.white,
+                                          icon: Icons.delete_outline_rounded,
+                                          label: 'Delete',
+                                          borderRadius: BorderRadius.circular(AppRadius.sm),
+                                        ),
+                                      ],
+                                    ),
+                                    child: _ExpenseCard(expense: e),
                                   ),
-                                ],
-                              ),
-                              child: _ExpenseCard(expense: e),
-                            ),
+                                ),
+                              );
+                            }),
                           ),
-                        );
-                      },
-                      childCount: filtered.length,
-                    ),
-                  ),
+                        ),
                 ),
+              ),
               const SliverToBoxAdapter(child: SizedBox(height: 96)),
             ],
+          ),
           );
         },
       ),
@@ -162,7 +195,7 @@ class _FinanceScreenState extends State<FinanceScreen> {
                   margin: const EdgeInsets.symmetric(horizontal: 4),
                   height: 70,
                   decoration: BoxDecoration(
-                    color: Colors.white,
+                    color: cs.surfaceContainerHighest,
                     borderRadius: BorderRadius.circular(AppRadius.sm),
                   ),
                 ),
@@ -174,7 +207,7 @@ class _FinanceScreenState extends State<FinanceScreen> {
             child: Container(
               height: 180,
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: cs.surfaceContainerHighest,
                 borderRadius: BorderRadius.circular(AppRadius.md),
               ),
             ),
@@ -190,7 +223,7 @@ class _FinanceScreenState extends State<FinanceScreen> {
       title: Row(
         children: [
           Text('Finance',
-              style: GoogleFonts.sora(fontSize: 20, fontWeight: FontWeight.w600, color: cs.onSurface)),
+              style: TextStyle(fontFamily: 'Satoshi', fontSize: 20, fontWeight: FontWeight.w600, color: cs.onSurface)),
           const Spacer(),
           _monthArrow(Icons.chevron_left_rounded, () {
             final f = context.read<FinanceProvider>();
@@ -205,8 +238,12 @@ class _FinanceScreenState extends State<FinanceScreen> {
               );
               return Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 8),
-                child: Text(monthName,
-                    style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w500, color: cs.onSurface)),
+                child: AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 300),
+                  child: Text(monthName,
+                      key: ValueKey(monthName),
+                      style: TextStyle(fontFamily: 'Satoshi', fontSize: 14, fontWeight: FontWeight.w500, color: cs.onSurface)),
+                ),
               );
             },
           ),
@@ -244,35 +281,30 @@ class _FinanceScreenState extends State<FinanceScreen> {
       padding: const EdgeInsets.fromLTRB(AppSpacing.md, AppSpacing.sm, AppSpacing.md, 0),
       child: Row(
         children: [
-          _summaryCard('Income', '\$${finance.monthlyIncome.toStringAsFixed(0)}', success, expanded: true),
+          _AnimatedSummaryCard(
+            entryController: _entryController,
+            index: 0,
+            label: 'Income',
+            amount: finance.monthlyIncome,
+            color: success,
+          ),
           const SizedBox(width: 8),
-          _summaryCard('Expenses', '\$${finance.monthlyExpenses.toStringAsFixed(0)}', danger, expanded: true),
+          _AnimatedSummaryCard(
+            entryController: _entryController,
+            index: 1,
+            label: 'Expenses',
+            amount: finance.monthlyExpenses,
+            color: danger,
+          ),
           const SizedBox(width: 8),
-          _summaryCard('Balance', '\$${finance.balance.toStringAsFixed(0)}', primary, expanded: true),
+          _AnimatedSummaryCard(
+            entryController: _entryController,
+            index: 2,
+            label: 'Balance',
+            amount: finance.balance,
+            color: primary,
+          ),
         ],
-      ),
-    );
-  }
-
-  Widget _summaryCard(String label, String amount, Color color, {bool expanded = false}) {
-    return Expanded(
-      child: Container(
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: context.cardColor,
-          borderRadius: BorderRadius.circular(AppRadius.sm),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(label, style: GoogleFonts.inter(fontSize: 11, color: color.withValues(alpha: 0.8))),
-            const SizedBox(height: 4),
-            Text(amount,
-                style: GoogleFonts.sora(fontSize: 16, fontWeight: FontWeight.w700, color: color),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis),
-          ],
-        ),
       ),
     );
   }
@@ -296,7 +328,7 @@ class _FinanceScreenState extends State<FinanceScreen> {
                     color: Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.3)),
                 const SizedBox(height: 8),
                 Text('No expenses this month',
-                    style: GoogleFonts.inter(fontSize: 14,
+                    style: TextStyle(fontFamily: 'Satoshi', fontSize: 14,
                         color: Theme.of(context).colorScheme.onSurfaceVariant)),
               ],
             ),
@@ -319,53 +351,84 @@ class _FinanceScreenState extends State<FinanceScreen> {
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(AppSpacing.md, AppSpacing.md, AppSpacing.md, 0),
-      child: Container(
-        padding: const EdgeInsets.all(AppSpacing.md),
-        decoration: BoxDecoration(
-          color: context.cardColor,
-          borderRadius: BorderRadius.circular(AppRadius.md),
-        ),
-        child: Column(
-          children: [
-            SizedBox(
-              height: 150,
-              child: PieChart(
-                PieChartData(
-                  sections: sections.asMap().entries.map((e) {
-                    final pct = (e.value.value / total * 100);
-                    return PieChartSectionData(
-                      value: e.value.value,
-                      color: colors[e.key % colors.length],
-                      radius: 50,
-                      title: '${pct.toStringAsFixed(0)}%',
-                      titleStyle: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w600, color: Colors.white),
-                    );
-                  }).toList(),
-                  sectionsSpace: 2,
-                  centerSpaceRadius: 30,
+      child: AnimatedBuilder(
+        animation: _entryController,
+        builder: (context, child) {
+          final progress = _entryController.value;
+          return Opacity(
+            opacity: progress.clamp(0, 1),
+            child: Transform.translate(
+              offset: Offset(0, 20 * (1 - progress.clamp(0, 1))),
+              child: child,
+            ),
+          );
+        },
+        child: Container(
+          padding: const EdgeInsets.all(AppSpacing.md),
+          decoration: BoxDecoration(
+            color: context.cardColor,
+            borderRadius: BorderRadius.circular(AppRadius.md),
+          ),
+          child: Column(
+            children: [
+              SizedBox(
+                height: 150,
+                child: PieChart(
+                  PieChartData(
+                    sections: sections.asMap().entries.map((e) {
+                      final pct = (e.value.value / total * 100);
+                      final isTapped = _tappedPieIndex == e.key;
+                      return PieChartSectionData(
+                        value: e.value.value,
+                        color: colors[e.key % colors.length],
+                        radius: isTapped ? 55 : 50,
+                        title: '${pct.toStringAsFixed(0)}%',
+                        titleStyle: const TextStyle(fontFamily: 'Satoshi', fontSize: 11, fontWeight: FontWeight.w600, color: Colors.white),
+                        badgeWidget: isTapped
+                            ? Container(
+                                width: 8, height: 8,
+                                decoration: const BoxDecoration(
+                                  color: Colors.white, shape: BoxShape.circle,
+                                ),
+                              )
+                            : null,
+                      );
+                    }).toList(),
+                    sectionsSpace: 2,
+                    centerSpaceRadius: 30,
+                    pieTouchData: PieTouchData(
+                      touchCallback: (event, response) {
+                        if (event is FlTapUpEvent || event is FlLongPressEnd) {
+                          setState(() => _tappedPieIndex = -1);
+                        } else if (response != null && response.touchedSection != null) {
+                          setState(() => _tappedPieIndex = response.touchedSection!.touchedSectionIndex);
+                        }
+                      },
+                    ),
+                  ),
                 ),
               ),
-            ),
-            const SizedBox(height: 12),
-            Wrap(
-              spacing: 16, runSpacing: 6,
-              children: sections.asMap().entries.map((e) {
-                final pct = (e.value.value / total * 100);
-                return Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      width: 8, height: 8,
-                      decoration: BoxDecoration(color: colors[e.key % colors.length], shape: BoxShape.circle),
-                    ),
-                    const SizedBox(width: 4),
-                    Text('${e.value.key} (${pct.toStringAsFixed(0)}%)',
-                        style: GoogleFonts.inter(fontSize: 12, color: cs.onSurfaceVariant)),
-                  ],
-                );
-              }).toList(),
-            ),
-          ],
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 16, runSpacing: 6,
+                children: sections.asMap().entries.map((e) {
+                  final pct = (e.value.value / total * 100);
+                  return Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        width: 8, height: 8,
+                        decoration: BoxDecoration(color: colors[e.key % colors.length], shape: BoxShape.circle),
+                      ),
+                      const SizedBox(width: 4),
+                      Text('${e.value.key} (${pct.toStringAsFixed(0)}%)',
+                          style: TextStyle(fontFamily: 'Satoshi', fontSize: 12, color: cs.onSurfaceVariant)),
+                    ],
+                  );
+                }).toList(),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -374,17 +437,6 @@ class _FinanceScreenState extends State<FinanceScreen> {
   Widget _buildBudgetProgress() {
     final finance = context.watch<FinanceProvider>();
     final cs = Theme.of(context).colorScheme;
-    final progress = finance.getBudgetProgress(_budgetLimit);
-    final usedPct = (progress * 100).toStringAsFixed(0);
-
-    Color barColor;
-    if (progress < 0.5) {
-      barColor = context.successColor;
-    } else if (progress < 0.8) {
-      barColor = context.warningColor;
-    } else {
-      barColor = context.dangerColor;
-    }
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(AppSpacing.md, AppSpacing.md, AppSpacing.md, 0),
@@ -400,69 +452,166 @@ class _FinanceScreenState extends State<FinanceScreen> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text('Monthly Budget',
-                    style: GoogleFonts.sora(fontSize: 16, fontWeight: FontWeight.w600, color: cs.onSurface)),
+                Text('Category Budgets',
+                    style: TextStyle(fontFamily: 'Satoshi', fontSize: 16, fontWeight: FontWeight.w600, color: cs.onSurface)),
                 GestureDetector(
-                  onTap: () => _editBudget(cs),
+                  onTap: () => _editCategoryBudgets(cs),
                   child: Icon(Icons.edit_rounded, size: 16, color: cs.onSurfaceVariant),
                 ),
               ],
             ),
-            const SizedBox(height: 10),
-            ClipRRect(
-              borderRadius: BorderRadius.circular(4),
-              child: LinearProgressIndicator(
-                value: progress,
-                backgroundColor: cs.onSurfaceVariant.withValues(alpha: 0.15),
-                color: barColor,
-                minHeight: 8,
-              ),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              "You've used $usedPct% of your \$${_budgetLimit.toStringAsFixed(0)} budget",
-              style: GoogleFonts.inter(fontSize: 12, color: cs.onSurfaceVariant),
-            ),
+            const SizedBox(height: 12),
+            if (_categoryBudgets.isEmpty)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                child: Text('Set a budget for each category by tapping the edit icon.',
+                    style: TextStyle(fontFamily: 'Satoshi', fontSize: 13, color: cs.onSurfaceVariant)),
+              )
+            else
+              ..._categoryData.map((cat) {
+                final budget = _categoryBudgets[cat.name] ?? 0;
+                if (budget <= 0) return const SizedBox.shrink();
+                final spent = finance.categoryBreakdown[cat.name] ?? 0;
+                final progress = budget > 0 ? ((spent / budget).clamp(0.0, 1.0).toDouble()) : 0.0;
+                final pct = (progress * 100).toStringAsFixed(0);
+
+                Color barColor;
+                if (progress < 0.5) {
+                  barColor = context.successColor;
+                } else if (progress < 0.8) {
+                  barColor = context.warningColor;
+                } else {
+                  barColor = context.dangerColor;
+                }
+
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 10),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(cat.icon, size: 16, color: cs.onSurfaceVariant),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text(cat.name,
+                                style: TextStyle(fontFamily: 'Satoshi', fontSize: 13, fontWeight: FontWeight.w500, color: cs.onSurface)),
+                          ),
+                          Text('\$${spent.toStringAsFixed(0)} / \$${budget.toStringAsFixed(0)}',
+                              style: TextStyle(fontFamily: 'Satoshi', fontSize: 11, color: cs.onSurfaceVariant)),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(4),
+                        child: LinearProgressIndicator(
+                          value: progress,
+                          backgroundColor: cs.onSurfaceVariant.withValues(alpha: 0.15),
+                          color: barColor,
+                          minHeight: 6,
+                        ),
+                      ),
+                      if (progress >= 0.8)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 2),
+                          child: Text(
+                            progress >= 1.0 ? '$pct% exceeded!' : '$pct% used',
+                            style: TextStyle(fontFamily: 'Satoshi', fontSize: 10, color: barColor, fontWeight: FontWeight.w600),
+                          ),
+                        ),
+                    ],
+                  ),
+                );
+              }),
           ],
         ),
       ),
     );
   }
 
-  Future<void> _editBudget(ColorScheme cs) async {
-    final controller = TextEditingController(text: _budgetLimit.toStringAsFixed(0));
-    final result = await showDialog<double>(
+  Future<void> _editCategoryBudgets(ColorScheme cs) async {
+    final controllers = <String, TextEditingController>{};
+    final tempBudgets = Map<String, double>.from(_categoryBudgets);
+
+    for (final cat in _categoryData) {
+      final current = tempBudgets[cat.name] ?? 0;
+      controllers[cat.name] = TextEditingController(
+        text: current > 0 ? current.toStringAsFixed(0) : '',
+      );
+    }
+
+    final result = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text('Monthly Budget', style: GoogleFonts.sora(fontWeight: FontWeight.w600)),
-        content: TextField(
-          controller: controller,
-          keyboardType: const TextInputType.numberWithOptions(decimal: true),
-          style: GoogleFonts.inter(fontSize: 16, color: cs.onSurface),
-          decoration: InputDecoration(
-            prefixText: '\$ ',
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(AppRadius.sm)),
+        title: const Text('Category Budgets', style: TextStyle(fontFamily: 'Satoshi', fontWeight: FontWeight.w600)),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: _categoryData.map((cat) {
+                return Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 6),
+                  child: Row(
+                    children: [
+                      Icon(cat.icon, size: 20, color: cs.onSurfaceVariant),
+                      const SizedBox(width: 8),
+                      SizedBox(
+                        width: 90,
+                        child: Text(cat.name,
+                            style: TextStyle(fontFamily: 'Satoshi', fontSize: 14, color: cs.onSurface)),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: TextField(
+                          controller: controllers[cat.name],
+                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                          style: TextStyle(fontFamily: 'Satoshi', fontSize: 14, color: cs.onSurface),
+                          decoration: InputDecoration(
+                            prefixText: '\$ ',
+                            isDense: true,
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(AppRadius.sm)),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }).toList(),
+            ),
           ),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: Text('Cancel', style: GoogleFonts.inter()),
+            child: const Text('Cancel', style: TextStyle(fontFamily: 'Satoshi')),
           ),
           TextButton(
             onPressed: () {
-              final v = double.tryParse(controller.text);
-              if (v != null && v > 0) Navigator.pop(ctx, v);
+              for (final cat in _categoryData) {
+                final v = double.tryParse(controllers[cat.name]!.text);
+                if (v != null && v > 0) {
+                  tempBudgets[cat.name] = v;
+                } else {
+                  tempBudgets.remove(cat.name);
+                }
+              }
+              Navigator.pop(ctx, true);
             },
-            child: Text('Save', style: GoogleFonts.inter()),
+            child: const Text('Save', style: TextStyle(fontFamily: 'Satoshi')),
           ),
         ],
       ),
     );
-    if (result != null) {
-      await _saveBudgetLimit(result);
+
+    for (final c in controllers.values) {
+      c.dispose();
     }
-    controller.dispose();
+
+    if (result == true) {
+      await _saveCategoryBudgets(tempBudgets);
+    }
   }
 
   Widget _buildSpendingAnalysis(FinanceProvider finance) {
@@ -521,7 +670,7 @@ class _FinanceScreenState extends State<FinanceScreen> {
               Icon(Icons.analytics_rounded, size: 18, color: cs.primary),
               const SizedBox(width: 8),
               Text('Spending Analysis',
-                  style: GoogleFonts.sora(fontSize: 16, fontWeight: FontWeight.w600, color: cs.onSurface)),
+                  style: TextStyle(fontFamily: 'Satoshi', fontSize: 16, fontWeight: FontWeight.w600, color: cs.onSurface)),
             ],
           ),
           const SizedBox(height: 12),
@@ -529,7 +678,7 @@ class _FinanceScreenState extends State<FinanceScreen> {
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 4),
               child: Text('Start adding expenses to see analysis',
-                  style: GoogleFonts.inter(fontSize: 13, color: cs.onSurfaceVariant)),
+                  style: TextStyle(fontFamily: 'Satoshi', fontSize: 13, color: cs.onSurfaceVariant)),
             )
           else ...[
             _analysisRow('Highest category',
@@ -545,11 +694,10 @@ class _FinanceScreenState extends State<FinanceScreen> {
       ),
     );
 
+    if (!isPremium) return const SizedBox.shrink();
     return Padding(
       padding: const EdgeInsets.fromLTRB(AppSpacing.md, AppSpacing.md, AppSpacing.md, 0),
-      child: isPremium
-          ? cardContent
-          : PremiumLockWidget(feature: 'spending analysis', child: cardContent),
+      child: cardContent,
     );
   }
 
@@ -557,8 +705,8 @@ class _FinanceScreenState extends State<FinanceScreen> {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Text(label, style: GoogleFonts.inter(fontSize: 13, color: textSecondary)),
-        Text(value, style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w600, color: valueColor)),
+        Text(label, style: TextStyle(fontFamily: 'Satoshi', fontSize: 13, color: textSecondary)),
+        Text(value, style: TextStyle(fontFamily: 'Satoshi', fontSize: 13, fontWeight: FontWeight.w600, color: valueColor)),
       ],
     );
   }
@@ -567,7 +715,7 @@ class _FinanceScreenState extends State<FinanceScreen> {
     return Padding(
       padding: const EdgeInsets.fromLTRB(AppSpacing.md, AppSpacing.md, AppSpacing.md, AppSpacing.sm),
       child: Text('Transactions',
-          style: GoogleFonts.sora(fontSize: 18, fontWeight: FontWeight.w600, color: cs.onSurface)),
+          style: TextStyle(fontFamily: 'Satoshi', fontSize: 18, fontWeight: FontWeight.w600, color: cs.onSurface)),
     );
   }
 
@@ -593,7 +741,7 @@ class _FinanceScreenState extends State<FinanceScreen> {
                   ),
                 ),
                 child: Text(f,
-                    style: GoogleFonts.inter(
+                    style: TextStyle(fontFamily: 'Satoshi', 
                       fontSize: 13, fontWeight: FontWeight.w500,
                       color: active ? Colors.white : cs.onSurfaceVariant,
                     )),
@@ -623,15 +771,15 @@ class _FinanceScreenState extends State<FinanceScreen> {
             ),
             const SizedBox(height: 16),
             Text('No transactions yet',
-                style: GoogleFonts.sora(fontSize: 16, fontWeight: FontWeight.w600, color: cs.onSurface)),
+                style: TextStyle(fontFamily: 'Satoshi', fontSize: 16, fontWeight: FontWeight.w600, color: cs.onSurface)),
             const SizedBox(height: 6),
             Text('Start logging your money.',
-                style: GoogleFonts.inter(fontSize: 14, color: cs.onSurfaceVariant)),
+                style: TextStyle(fontFamily: 'Satoshi', fontSize: 14, color: cs.onSurfaceVariant)),
             const SizedBox(height: 20),
             ElevatedButton.icon(
               onPressed: () => _showAddSheet(),
               icon: const Icon(Icons.add_rounded, size: 18),
-              label: Text('Add Transaction', style: GoogleFonts.inter(fontWeight: FontWeight.w600)),
+              label: const Text('Add Transaction', style: TextStyle(fontFamily: 'Satoshi', fontWeight: FontWeight.w600)),
             ),
           ],
         ),
@@ -642,11 +790,11 @@ class _FinanceScreenState extends State<FinanceScreen> {
   List<ExpenseModel> _filteredTransactions(FinanceProvider finance) {
     switch (_filterTab) {
       case 'Income':
-        return finance.expenses.where((e) => e.type == 'income').toList();
+        return finance.filteredExpenses.where((e) => e.type == 'income').toList();
       case 'Expenses':
-        return finance.expenses.where((e) => e.type == 'expense').toList();
+        return finance.filteredExpenses.where((e) => e.type == 'expense').toList();
       default:
-        return finance.expenses;
+        return finance.filteredExpenses;
     }
   }
 
@@ -660,8 +808,9 @@ class _FinanceScreenState extends State<FinanceScreen> {
           try {
             context.read<FinanceProvider>().loadFinanceData();
           } catch (_) {}
-          HapticFeedback.lightImpact();
+          try { HapticFeedback.lightImpact(); } catch (_) {}
         },
+        categoryBudgets: _categoryBudgets,
       ),
     );
   }
@@ -722,17 +871,17 @@ class _ExpenseCard extends StatelessWidget {
               children: [
                 Text(
                   expense.description.isEmpty ? expense.category : expense.description,
-                  style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w500, color: cs.onSurface),
+                  style: TextStyle(fontFamily: 'Satoshi', fontSize: 14, fontWeight: FontWeight.w500, color: cs.onSurface),
                   maxLines: 1, overflow: TextOverflow.ellipsis,
                 ),
                 const SizedBox(height: 2),
                 Text('${expense.category} \u00B7 ${_dateLabel(expense.date)}',
-                    style: GoogleFonts.inter(fontSize: 12, color: cs.onSurfaceVariant)),
+                    style: TextStyle(fontFamily: 'Satoshi', fontSize: 12, color: cs.onSurfaceVariant)),
               ],
             ),
           ),
           Text('${isIncome ? '+' : '-'}\$${expense.amount.toStringAsFixed(2)}',
-              style: GoogleFonts.inter(fontSize: 15, fontWeight: FontWeight.w600, color: amountColor)),
+              style: TextStyle(fontFamily: 'Satoshi', fontSize: 15, fontWeight: FontWeight.w600, color: amountColor)),
         ],
       ),
     );
@@ -741,7 +890,8 @@ class _ExpenseCard extends StatelessWidget {
 
 class _AddExpenseSheet extends StatefulWidget {
   final VoidCallback onSaved;
-  const _AddExpenseSheet({required this.onSaved});
+  final Map<String, double> categoryBudgets;
+  const _AddExpenseSheet({required this.onSaved, required this.categoryBudgets});
 
   @override
   State<_AddExpenseSheet> createState() => _AddExpenseSheetState();
@@ -751,11 +901,9 @@ class _AddExpenseSheetState extends State<_AddExpenseSheet> {
   final _amountController = TextEditingController();
   final _descriptionController = TextEditingController();
   bool _isIncome = false;
-  String _category = 'Food';
+  String _category = 'Other';
   String? _receiptPath;
   bool _isSaving = false;
-
-  static const _categories = ['Food', 'Transport', 'Entertainment', 'Health', 'Shopping', 'Other'];
 
   final _picker = ImagePicker();
 
@@ -784,6 +932,11 @@ class _AddExpenseSheetState extends State<_AddExpenseSheet> {
       );
 
       await context.read<FinanceProvider>().addExpense(expense);
+
+      if (!_isIncome && mounted) {
+        _checkBudgetAlert();
+      }
+
       widget.onSaved();
       if (mounted) Navigator.pop(context);
     } catch (_) {
@@ -793,6 +946,29 @@ class _AddExpenseSheetState extends State<_AddExpenseSheet> {
           const SnackBar(content: Text("Couldn't save. Please try again.")),
         );
       }
+    }
+  }
+
+  void _checkBudgetAlert() {
+    final budget = widget.categoryBudgets[_category] ?? 0;
+    if (budget <= 0) return;
+    final finance = context.read<FinanceProvider>();
+    final spent = finance.categoryBreakdown[_category] ?? 0;
+    final progress = spent / budget;
+    if (progress >= 1.0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('$_category budget exceeded! You\'ve spent \$${spent.toStringAsFixed(0)} of \$${budget.toStringAsFixed(0)}.'),
+          backgroundColor: context.dangerColor,
+        ),
+      );
+    } else if (progress >= 0.8) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Warning: You\'ve used ${(progress * 100).toStringAsFixed(0)}% of your $_category budget.'),
+          backgroundColor: context.warningColor,
+        ),
+      );
     }
   }
 
@@ -827,7 +1003,7 @@ class _AddExpenseSheetState extends State<_AddExpenseSheet> {
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
                 child: Text('Add Transaction',
-                    style: GoogleFonts.sora(fontSize: 18, fontWeight: FontWeight.w600, color: cs.onSurface)),
+                    style: TextStyle(fontFamily: 'Satoshi', fontSize: 18, fontWeight: FontWeight.w600, color: cs.onSurface)),
               ),
               const SizedBox(height: AppSpacing.sm),
               Expanded(
@@ -839,16 +1015,16 @@ class _AddExpenseSheetState extends State<_AddExpenseSheet> {
                     children: [
                       Row(
                         children: [
-                          Text('\$', style: GoogleFonts.sora(fontSize: 28, fontWeight: FontWeight.w700, color: cs.onSurface)),
+                          Text('\$', style: TextStyle(fontFamily: 'Satoshi', fontSize: 28, fontWeight: FontWeight.w700, color: cs.onSurface)),
                           const SizedBox(width: 4),
                           Expanded(
                             child: TextField(
                               controller: _amountController,
                               keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                              style: GoogleFonts.sora(fontSize: 28, fontWeight: FontWeight.w700, color: cs.onSurface),
+                              style: TextStyle(fontFamily: 'Satoshi', fontSize: 28, fontWeight: FontWeight.w700, color: cs.onSurface),
                               decoration: InputDecoration(
                                 hintText: '0.00',
-                                hintStyle: GoogleFonts.sora(fontSize: 28, fontWeight: FontWeight.w700,
+                                hintStyle: TextStyle(fontFamily: 'Satoshi', fontSize: 28, fontWeight: FontWeight.w700,
                                     color: cs.onSurfaceVariant.withValues(alpha: 0.3)),
                                 border: InputBorder.none,
                                 enabledBorder: InputBorder.none,
@@ -869,14 +1045,14 @@ class _AddExpenseSheetState extends State<_AddExpenseSheet> {
                         ],
                       ),
                       const SizedBox(height: AppSpacing.md),
-                      Text('Category', style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w500, color: cs.onSurfaceVariant)),
+                      Text('Category', style: TextStyle(fontFamily: 'Satoshi', fontSize: 13, fontWeight: FontWeight.w500, color: cs.onSurfaceVariant)),
                       const SizedBox(height: 6),
                       Wrap(
                         spacing: 6, runSpacing: 6,
-                        children: _categories.map((cat) {
-                          final selected = _category == cat;
+                        children: _FinanceScreenState._categoryData.map((cat) {
+                          final selected = _category == cat.name;
                           return GestureDetector(
-                            onTap: () => setState(() => _category = cat),
+                            onTap: () => setState(() => _category = cat.name),
                             child: Container(
                               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                               decoration: BoxDecoration(
@@ -886,11 +1062,18 @@ class _AddExpenseSheetState extends State<_AddExpenseSheet> {
                                   color: selected ? cs.primary : cs.onSurfaceVariant.withValues(alpha: 0.2),
                                 ),
                               ),
-                              child: Text(cat, style: GoogleFonts.inter(
-                                fontSize: 13,
-                                color: selected ? cs.primary : cs.onSurface,
-                                fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
-                              )),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(cat.icon, size: 14, color: selected ? cs.primary : cs.onSurfaceVariant),
+                                  const SizedBox(width: 4),
+                                  Text(cat.name, style: TextStyle(fontFamily: 'Satoshi', 
+                                    fontSize: 13,
+                                    color: selected ? cs.primary : cs.onSurface,
+                                    fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+                                  )),
+                                ],
+                              ),
                             ),
                           );
                         }).toList(),
@@ -899,10 +1082,10 @@ class _AddExpenseSheetState extends State<_AddExpenseSheet> {
                       TextField(
                         controller: _descriptionController,
                         maxLines: 2,
-                        style: GoogleFonts.inter(fontSize: 14, color: cs.onSurface),
+                        style: TextStyle(fontFamily: 'Satoshi', fontSize: 14, color: cs.onSurface),
                         decoration: InputDecoration(
                           hintText: 'Description (optional)',
-                          hintStyle: GoogleFonts.inter(color: cs.onSurfaceVariant.withValues(alpha: 0.5)),
+                          hintStyle: TextStyle(fontFamily: 'Satoshi', color: cs.onSurfaceVariant.withValues(alpha: 0.5)),
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(AppRadius.sm),
                             borderSide: BorderSide(color: cs.onSurfaceVariant.withValues(alpha: 0.2)),
@@ -925,11 +1108,10 @@ class _AddExpenseSheetState extends State<_AddExpenseSheet> {
                             final file = await _picker.pickImage(source: ImageSource.camera);
                             if (file != null) setState(() => _receiptPath = file.path);
                           } catch (_) {
-                            if (mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text('Please allow camera access in Settings.')),
-                              );
-                            }
+                            if (!context.mounted) return;
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Please allow camera access in Settings.')),
+                            );
                           }
                         },
                         child: Row(
@@ -937,7 +1119,7 @@ class _AddExpenseSheetState extends State<_AddExpenseSheet> {
                             Icon(Icons.receipt_rounded, size: 18, color: cs.onSurfaceVariant),
                             const SizedBox(width: 6),
                             Text(_receiptPath != null ? 'Receipt added' : 'Add receipt photo',
-                                style: GoogleFonts.inter(fontSize: 13, color: cs.onSurfaceVariant)),
+                                style: TextStyle(fontFamily: 'Satoshi', fontSize: 13, color: cs.onSurfaceVariant)),
                           ],
                         ),
                       ),
@@ -950,7 +1132,7 @@ class _AddExpenseSheetState extends State<_AddExpenseSheet> {
                           child: _isSaving
                               ? const SizedBox(width: 18, height: 18,
                                   child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                              : Text('Save', style: GoogleFonts.inter(fontWeight: FontWeight.w600)),
+                              : const Text('Save', style: TextStyle(fontFamily: 'Satoshi', fontWeight: FontWeight.w600)),
                         ),
                       ),
                     ],
@@ -976,11 +1158,114 @@ class _AddExpenseSheetState extends State<_AddExpenseSheet> {
             color: selected ? cs.primary : cs.onSurface.withValues(alpha: 0.2),
           ),
         ),
-        child: Text(label, style: GoogleFonts.inter(
+        child: Text(label, style: TextStyle(fontFamily: 'Satoshi', 
           fontSize: 13, fontWeight: FontWeight.w500,
           color: selected ? cs.primary : cs.onSurface,
         )),
       ),
     );
   }
+}
+
+class _AnimatedSummaryCard extends StatelessWidget {
+  final AnimationController entryController;
+  final int index;
+  final String label;
+  final double amount;
+  final Color color;
+
+  const _AnimatedSummaryCard({
+    required this.entryController,
+    required this.index,
+    required this.label,
+    required this.amount,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: AnimatedBuilder(
+        animation: entryController,
+        builder: (context, child) {
+          final delay = 0.1 * index;
+          final t = ((entryController.value - delay) / 0.4).clamp(0.0, 1.0);
+          return Opacity(
+            opacity: t,
+            child: Transform.translate(
+              offset: Offset(0, 20 * (1 - Curves.easeOut.transform(t))),
+              child: child,
+            ),
+          );
+        },
+        child: Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: context.cardColor,
+            borderRadius: BorderRadius.circular(AppRadius.sm),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(label, style: TextStyle(fontFamily: 'Satoshi', fontSize: 11, color: color.withValues(alpha: 0.8))),
+              const SizedBox(height: 4),
+              _CountUpText(
+                target: amount,
+                style: TextStyle(fontFamily: 'Satoshi', fontSize: 16, fontWeight: FontWeight.w700, color: color),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _CountUpText extends StatefulWidget {
+  final double target;
+  final TextStyle style;
+
+  const _CountUpText({required this.target, required this.style});
+
+  @override
+  State<_CountUpText> createState() => _CountUpTextState();
+}
+
+class _CountUpTextState extends State<_CountUpText>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<double> _animation;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 800),
+    )..forward();
+    _animation = CurvedAnimation(parent: _controller, curve: Curves.easeOut);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _animation,
+      builder: (context, child) {
+        final value = widget.target * _animation.value;
+        return Text('\$${value.toStringAsFixed(2)}', style: widget.style);
+      },
+    );
+  }
+}
+
+class _CategoryData {
+  final String name;
+  final IconData icon;
+  const _CategoryData(this.name, this.icon);
 }

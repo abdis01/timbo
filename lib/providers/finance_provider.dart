@@ -12,6 +12,9 @@ class FinanceProvider extends ChangeNotifier {
   int _selectedYear = DateTime.now().year;
 
   List<ExpenseModel> get expenses => List.unmodifiable(_expenses);
+  List<ExpenseModel> get filteredExpenses => _expenses
+      .where((e) => e.date.month == _selectedMonth && e.date.year == _selectedYear)
+      .toList();
   double get monthlyIncome => _monthlyIncome;
   double get monthlyExpenses => _monthlyExpenses;
   double get balance => _monthlyIncome - _monthlyExpenses;
@@ -72,6 +75,12 @@ class FinanceProvider extends ChangeNotifier {
 
   double getBudgetProgress(double budgetLimit) {
     if (budgetLimit <= 0) return 0;
-    return (_monthlyExpenses / budgetLimit).clamp(0, 1);
+    return (_monthlyExpenses / budgetLimit).clamp(0.0, 1.0).toDouble();
+  }
+
+  double getCategoryBudgetProgress(String category, double categoryBudget) {
+    if (categoryBudget <= 0) return 0;
+    final spent = _categoryBreakdown[category] ?? 0;
+    return (spent / categoryBudget).clamp(0.0, 1.0).toDouble();
   }
 }

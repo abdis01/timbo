@@ -16,43 +16,50 @@ class FirebaseService {
   static final FirebaseService _instance = FirebaseService._();
   static FirebaseService get instance => _instance;
 
-  final FirebaseAuth _auth = FirebaseAuth.instance;
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  static bool _isAvailable = false;
+  bool get isAvailable => _isAvailable;
+
+  FirebaseAuth? _auth;
+  FirebaseFirestore? _firestore;
+  FirebaseAuth get _authRef {
+    if (!_isAvailable) throw Exception('Firebase not initialized');
+    _auth ??= FirebaseAuth.instance;
+    return _auth!;
+  }
+  FirebaseFirestore get _firestoreRef {
+    if (!_isAvailable) throw Exception('Firebase not initialized');
+    _firestore ??= FirebaseFirestore.instance;
+    return _firestore!;
+  }
 
   static Future<void> init() async {
-    try {
-      await Firebase.initializeApp(
-        options: DefaultFirebaseOptions.currentPlatform,
-      );
-    } catch (_) {
-      await Firebase.initializeApp(
-        options: const FirebaseOptions(
-          apiKey: 'AIzaSyDFDY80vwhwGqewuAJZQJk88uHLrEVsm1M',
-          appId: '1:676323736878:android:4e3f10aadbb2e92a0dcebf',
-          messagingSenderId: '676323736878',
-          projectId: 'timbo-4fad8',
-          storageBucket: 'timbo-4fad8.firebasestorage.app',
-        ),
-      );
-    }
+      try {
+        await Firebase.initializeApp(
+          options: DefaultFirebaseOptions.currentPlatform,
+        );
+        _isAvailable = true;
+      } catch (_) {
+        _isAvailable = false;
+      }
   }
 
   // --- AUTH ---
 
   Future<UserCredential?> signUpWithEmail(
       String email, String password, String name) async {
-    final cred = await _auth.createUserWithEmailAndPassword(
+    final cred = await _authRef.createUserWithEmailAndPassword(
       email: email,
       password: password,
     );
-    await cred.user?.updateDisplayName(name);
+    if (cred.user == null) return cred;
+    await cred.user!.updateDisplayName(name);
     await _createUserDocument(cred.user!.uid, name, email);
     return cred;
   }
 
   Future<UserCredential?> signInWithEmail(
       String email, String password) async {
-    return await _auth.signInWithEmailAndPassword(
+    return await _authRef.signInWithEmailAndPassword(
       email: email,
       password: password,
     );
@@ -66,51 +73,57 @@ class FirebaseService {
       accessToken: googleAuth.accessToken,
       idToken: googleAuth.idToken,
     );
-    final cred = await _auth.signInWithCredential(credential);
+    final cred = await _authRef.signInWithCredential(credential);
+    final uid = cred.user?.uid;
     if (cred.additionalUserInfo?.isNewUser ?? false) {
-      await _createUserDocument(
-        cred.user!.uid,
-        cred.user!.displayName ?? 'User',
-        cred.user!.email ?? '',
-      );
+      if (uid != null) {
+        await _createUserDocument(
+          uid,
+          cred.user!.displayName ?? 'User',
+          cred.user!.email ?? '',
+        );
+      }
     }
     return cred;
   }
 
   Future<void> signOut() async {
-    await _auth.signOut();
+    await _authRef.signOut();
     await GoogleSignIn().signOut();
   }
 
-  User? get currentUser => _auth.currentUser;
+  User? get currentUser => _isAvailable ? _authRef.currentUser : null;
 
-  bool get isLoggedIn => _auth.currentUser != null;
+  bool get isLoggedIn => _isAvailable && _authRef.currentUser != null;
 
-  Stream<User?> get authStateChanges => _auth.authStateChanges();
+  Stream<User?> get authStateChanges => _authRef.authStateChanges();
 
   Future<void> resetPassword(String email) async {
-    await _auth.sendPasswordResetEmail(email: email);
+    await _authRef.sendPasswordResetEmail(email: email);
   }
 
   // --- USER DOCUMENT ---
 
   Future<void> _createUserDocument(
       String uid, String name, String email) async {
-    await _firestore.collection('users').doc(uid).set({
+    final prefs = await SharedPreferences.getInstance();
+    final shakeEnabled = prefs.getBool('shake_to_capture_enabled') ?? false;
+    await _firestoreRef.collection('users').doc(uid).set({
       'name': name,
       'email': email,
+      'shakeToCapture': shakeEnabled,
       'isPremium': false,
       'createdAt': FieldValue.serverTimestamp(),
     });
   }
 
   Future<bool> checkPremiumStatus(String userId) async {
-    final doc = await _firestore.collection('users').doc(userId).get();
+    final doc = await _firestoreRef.collection('users').doc(userId).get();
     return doc.data()?['isPremium'] as bool? ?? false;
   }
 
   Future<void> setPremiumStatus(String userId, bool isPremium) async {
-    await _firestore.collection('users').doc(userId).update({
+    await _firestoreRef.collection('users').doc(userId).update({
       'isPremium': isPremium,
     });
   }
@@ -131,10 +144,10 @@ class FirebaseService {
   // --- CLOUD SYNC (Premium) ---
 
   Future<void> syncNotesToCloud(List<NoteModel> notes) async {
-    final userId = _auth.currentUser?.uid;
+    final userId = _authRef.currentUser?.uid;
     if (userId == null) return;
-    final batch = _firestore.batch();
-    final notesRef = _firestore.collection('users').doc(userId).collection('notes');
+    final batch = _firestoreRef.batch();
+    final notesRef = _firestoreRef.collection('users').doc(userId).collection('notes');
     for (final note in notes) {
       final docRef = notesRef.doc(note.id);
       batch.set(docRef, note.toJson());
@@ -143,10 +156,10 @@ class FirebaseService {
   }
 
   Future<void> syncExpensesToCloud(List<ExpenseModel> expenses) async {
-    final userId = _auth.currentUser?.uid;
+    final userId = _authRef.currentUser?.uid;
     if (userId == null) return;
-    final batch = _firestore.batch();
-    final ref = _firestore.collection('users').doc(userId).collection('expenses');
+    final batch = _firestoreRef.batch();
+    final ref = _firestoreRef.collection('users').doc(userId).collection('expenses');
     for (final expense in expenses) {
       final docRef = ref.doc(expense.id);
       batch.set(docRef, expense.toJson());
@@ -155,10 +168,10 @@ class FirebaseService {
   }
 
   Future<void> syncRemindersToCloud(List<ReminderModel> reminders) async {
-    final userId = _auth.currentUser?.uid;
+    final userId = _authRef.currentUser?.uid;
     if (userId == null) return;
-    final batch = _firestore.batch();
-    final ref = _firestore.collection('users').doc(userId).collection('reminders');
+    final batch = _firestoreRef.batch();
+    final ref = _firestoreRef.collection('users').doc(userId).collection('reminders');
     for (final reminder in reminders) {
       final docRef = ref.doc(reminder.id);
       batch.set(docRef, reminder.toJson());
@@ -172,24 +185,24 @@ class FirebaseService {
     required List<ReminderModel> reminders,
     required List<QuickCaptureModel> captures,
   }) async {
-    final batch = _firestore.batch();
+    final batch = _firestoreRef.batch();
 
-    final notesRef = _firestore.collection('users').doc(userId).collection('notes');
+    final notesRef = _firestoreRef.collection('users').doc(userId).collection('notes');
     for (final note in notes) {
       batch.set(notesRef.doc(note.id), note.toJson());
     }
 
-    final expensesRef = _firestore.collection('users').doc(userId).collection('expenses');
+    final expensesRef = _firestoreRef.collection('users').doc(userId).collection('expenses');
     for (final expense in expenses) {
       batch.set(expensesRef.doc(expense.id), expense.toJson());
     }
 
-    final remindersRef = _firestore.collection('users').doc(userId).collection('reminders');
+    final remindersRef = _firestoreRef.collection('users').doc(userId).collection('reminders');
     for (final reminder in reminders) {
       batch.set(remindersRef.doc(reminder.id), reminder.toJson());
     }
 
-    final capturesRef = _firestore.collection('users').doc(userId).collection('captures');
+    final capturesRef = _firestoreRef.collection('users').doc(userId).collection('captures');
     for (final capture in captures) {
       batch.set(capturesRef.doc(capture.id), capture.toJson());
     }
@@ -204,19 +217,19 @@ class FirebaseService {
     required List<ReminderModel> reminders,
     required List<QuickCaptureModel> captures,
   }) async {
-    final batch = _firestore.batch();
+    final batch = _firestoreRef.batch();
 
     for (final note in notes.where((n) => n.updatedAt.isAfter(lastSyncTime))) {
-      batch.set(_firestore.collection('users').doc(userId).collection('notes').doc(note.id), note.toJson());
+      batch.set(_firestoreRef.collection('users').doc(userId).collection('notes').doc(note.id), note.toJson());
     }
     for (final expense in expenses.where((e) => e.updatedAt.isAfter(lastSyncTime))) {
-      batch.set(_firestore.collection('users').doc(userId).collection('expenses').doc(expense.id), expense.toJson());
+      batch.set(_firestoreRef.collection('users').doc(userId).collection('expenses').doc(expense.id), expense.toJson());
     }
     for (final reminder in reminders.where((r) => r.updatedAt.isAfter(lastSyncTime))) {
-      batch.set(_firestore.collection('users').doc(userId).collection('reminders').doc(reminder.id), reminder.toJson());
+      batch.set(_firestoreRef.collection('users').doc(userId).collection('reminders').doc(reminder.id), reminder.toJson());
     }
     for (final capture in captures.where((c) => c.updatedAt.isAfter(lastSyncTime))) {
-      batch.set(_firestore.collection('users').doc(userId).collection('captures').doc(capture.id), capture.toJson());
+      batch.set(_firestoreRef.collection('users').doc(userId).collection('captures').doc(capture.id), capture.toJson());
     }
 
     await batch.commit();
@@ -224,16 +237,16 @@ class FirebaseService {
   }
 
   Future<SyncCloudData> downloadFromCloud(String userId) async {
-    final notesSnap = await _firestore.collection('users').doc(userId).collection('notes').get();
+    final notesSnap = await _firestoreRef.collection('users').doc(userId).collection('notes').get();
     final notes = notesSnap.docs.map((d) => NoteModel.fromJson(d.data())).toList();
 
-    final expensesSnap = await _firestore.collection('users').doc(userId).collection('expenses').get();
+    final expensesSnap = await _firestoreRef.collection('users').doc(userId).collection('expenses').get();
     final expenses = expensesSnap.docs.map((d) => ExpenseModel.fromJson(d.data())).toList();
 
-    final remindersSnap = await _firestore.collection('users').doc(userId).collection('reminders').get();
+    final remindersSnap = await _firestoreRef.collection('users').doc(userId).collection('reminders').get();
     final reminders = remindersSnap.docs.map((d) => ReminderModel.fromJson(d.data())).toList();
 
-    final capturesSnap = await _firestore.collection('users').doc(userId).collection('captures').get();
+    final capturesSnap = await _firestoreRef.collection('users').doc(userId).collection('captures').get();
     final captures = capturesSnap.docs.map((d) => QuickCaptureModel.fromJson(d.data())).toList();
 
     return SyncCloudData(notes: notes, expenses: expenses, reminders: reminders, captures: captures);
@@ -248,12 +261,34 @@ class FirebaseService {
     return Connectivity().onConnectivityChanged.map((result) => result.any((r) => r != ConnectivityResult.none));
   }
 
+  Future<void> deleteNote(String userId, String noteId) async {
+    await _firestoreRef.collection('users').doc(userId).collection('notes').doc(noteId).delete();
+  }
+
+  Future<void> deleteExpense(String userId, String expenseId) async {
+    await _firestoreRef.collection('users').doc(userId).collection('expenses').doc(expenseId).delete();
+  }
+
+  Future<void> deleteReminder(String userId, String reminderId) async {
+    await _firestoreRef.collection('users').doc(userId).collection('reminders').doc(reminderId).delete();
+  }
+
+  Future<void> deleteCapture(String userId, String captureId) async {
+    await _firestoreRef.collection('users').doc(userId).collection('captures').doc(captureId).delete();
+  }
+
   Future<void> enableEmailVerification() async {
-    await _auth.currentUser?.sendEmailVerification();
+    await _authRef.currentUser?.sendEmailVerification();
   }
 
   Future<void> waitlistSignup(String email) async {
-    await _firestore.collection('waitlist').add({
+    final existing = await _firestoreRef
+        .collection('waitlist')
+        .where('email', isEqualTo: email)
+        .limit(1)
+        .get();
+    if (existing.docs.isNotEmpty) return;
+    await _firestoreRef.collection('waitlist').add({
       'email': email,
       'signedUpAt': FieldValue.serverTimestamp(),
     });

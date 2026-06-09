@@ -1,0 +1,17 @@
+{
+  "name": "timbo-gemini-proxy",
+  "version": "1.0.0",
+  "description": "Standalone Gemini API proxy for Timbo app",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "node --watch index.js"
+  },
+  "dependencies": {
+    "express": "^4.21.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.0",
+    "@google/generative-ai": "^0.21.0",
+    "firebase-admin": "^12.0.0"
+  }
+}

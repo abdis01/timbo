@@ -1,15 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_slidable/flutter_slidable.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:shimmer/shimmer.dart';
+import 'package:uuid/uuid.dart';
 import '../../config/theme.dart';
 import '../../config/routes.dart';
 import '../../models/note_model.dart';
 import '../../providers/notes_provider.dart';
 import '../../widgets/note_card.dart';
 import '../../widgets/bottom_nav.dart';
+import '../../widgets/empty_state_widget.dart';
 
 class NotesScreen extends StatefulWidget {
   const NotesScreen({super.key});
@@ -53,6 +54,16 @@ class _NotesScreenState extends State<NotesScreen> {
     super.dispose();
   }
 
+  void _createNote() {
+    final note = NoteModel(
+      id: const Uuid().v4(),
+      title: '',
+      content: '',
+    );
+    context.read<NotesProvider>().addNote(note);
+    Navigator.pushNamed(context, AppRoutes.noteDetail, arguments: note.id);
+  }
+
   void _toggleSearch() {
     setState(() {
       _isSearching = !_isSearching;
@@ -76,16 +87,25 @@ class _NotesScreenState extends State<NotesScreen> {
       appBar: _isSearching
           ? _buildSearchBar(cs)
           : _buildAppBar(cs),
-      bottomNavigationBar: AppBottomNav(activeRoute: AppRoutes.notes),
+      bottomNavigationBar: const AppBottomNav(activeRoute: AppRoutes.notes),
+      floatingActionButton: FloatingActionButton(
+        onPressed: _createNote,
+        child: const Icon(Icons.add_rounded),
+      ),
       body: _isLoading
           ? _shimmerList(cs)
-          : Consumer<NotesProvider>(
+          : RefreshIndicator(
+              onRefresh: _loadNotes,
+              child: Consumer<NotesProvider>(
               builder: (context, provider, _) {
                 final notes = _isSearching ? provider.searchResults : provider.notes;
                 final pinned = provider.pinnedNotes;
 
                 if (notes.isEmpty && pinned.isEmpty) {
-                  return _buildEmptyState(cs);
+                  return SingleChildScrollView(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    child: _buildEmptyState(cs),
+                  );
                 }
 
                 return CustomScrollView(
@@ -123,7 +143,7 @@ class _NotesScreenState extends State<NotesScreen> {
                           ),
                           child: Text(
                             'All Notes',
-                            style: GoogleFonts.sora(
+                            style: TextStyle(fontFamily: 'Satoshi', 
                               fontSize: 16, fontWeight: FontWeight.w600, color: cs.onSurface,
                             ),
                           ),
@@ -145,7 +165,7 @@ class _NotesScreenState extends State<NotesScreen> {
                                     children: [
                                       SlidableAction(
                                         onPressed: (_) {
-                                          HapticFeedback.lightImpact();
+                                          try { HapticFeedback.lightImpact(); } catch (_) {}
                                           provider.togglePin(note.id);
                                         },
                                         backgroundColor: context.warningColor,
@@ -166,7 +186,10 @@ class _NotesScreenState extends State<NotesScreen> {
                                       ),
                                     ],
                                   ),
-                                  child: NoteCard(note: note, onTap: () => _openNote(note)),
+                                  child: Hero(
+                                    tag: 'note_${note.id}',
+                                    child: NoteCard(note: note, onTap: () => _openNote(note)),
+                                  ),
                                 ),
                               ),
                             );
@@ -180,6 +203,7 @@ class _NotesScreenState extends State<NotesScreen> {
                 );
               },
             ),
+          ),
     );
   }
 
@@ -194,7 +218,7 @@ class _NotesScreenState extends State<NotesScreen> {
           margin: const EdgeInsets.only(bottom: 12),
           height: 100,
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: cs.surfaceContainerHighest,
             borderRadius: BorderRadius.circular(AppRadius.md),
           ),
         ),
@@ -206,7 +230,7 @@ class _NotesScreenState extends State<NotesScreen> {
     return AppBar(
       title: Text(
         'Notes',
-        style: GoogleFonts.sora(fontSize: 20, fontWeight: FontWeight.w600, color: cs.onSurface),
+        style: TextStyle(fontFamily: 'Satoshi', fontSize: 20, fontWeight: FontWeight.w600, color: cs.onSurface),
       ),
       automaticallyImplyLeading: false,
       actions: [
@@ -224,10 +248,10 @@ class _NotesScreenState extends State<NotesScreen> {
       title: TextField(
         controller: _searchController,
         focusNode: _focusNode,
-        style: GoogleFonts.inter(fontSize: 16, color: cs.onSurface),
+        style: TextStyle(fontFamily: 'Satoshi', fontSize: 16, color: cs.onSurface),
         decoration: InputDecoration(
           hintText: 'Search notes...',
-          hintStyle: GoogleFonts.inter(color: cs.onSurfaceVariant.withValues(alpha: 0.5)),
+          hintStyle: TextStyle(fontFamily: 'Satoshi', color: cs.onSurfaceVariant.withValues(alpha: 0.5)),
           border: InputBorder.none,
           enabledBorder: InputBorder.none,
           focusedBorder: InputBorder.none,
@@ -263,7 +287,7 @@ class _NotesScreenState extends State<NotesScreen> {
           const SizedBox(width: 6),
           Text(
             'Pinned',
-            style: GoogleFonts.sora(fontSize: 16, fontWeight: FontWeight.w600, color: cs.onSurface),
+            style: TextStyle(fontFamily: 'Satoshi', fontSize: 16, fontWeight: FontWeight.w600, color: cs.onSurface),
           ),
         ],
       ),
@@ -271,40 +295,13 @@ class _NotesScreenState extends State<NotesScreen> {
   }
 
   Widget _buildEmptyState(ColorScheme cs) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.xl),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              width: 80,
-              height: 80,
-              decoration: BoxDecoration(
-                color: cs.primary.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Icon(Icons.edit_note_rounded, size: 40, color: cs.primary.withValues(alpha: 0.5)),
-            ),
-            const SizedBox(height: AppSpacing.md),
-            Text(
-              'Your story starts here',
-              style: GoogleFonts.sora(fontSize: 18, fontWeight: FontWeight.w600, color: cs.onSurface),
-            ),
-            const SizedBox(height: AppSpacing.sm),
-            Text(
-              "Tap '+' to capture your first thought.",
-              style: GoogleFonts.inter(fontSize: 14, color: cs.onSurfaceVariant),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: AppSpacing.lg),
-            ElevatedButton.icon(
-              onPressed: () {},
-              icon: const Icon(Icons.add_rounded, size: 18),
-              label: Text('Create Note', style: GoogleFonts.inter(fontWeight: FontWeight.w600)),
-            ),
-          ],
-        ),
+    return EmptyStateWidget(
+      imagePath: 'assets/images/empty_notes.png',
+      message: 'Your story starts here\nTap \'+\' to capture your first thought.',
+      action: ElevatedButton.icon(
+        onPressed: _createNote,
+        icon: const Icon(Icons.add_rounded, size: 18),
+        label: const Text('Create Note', style: TextStyle(fontFamily: 'Satoshi', fontWeight: FontWeight.w600)),
       ),
     );
   }
@@ -317,20 +314,20 @@ class _NotesScreenState extends State<NotesScreen> {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text('Delete Note?', style: GoogleFonts.sora(fontWeight: FontWeight.w600)),
-        content: Text('Are you sure?', style: GoogleFonts.inter()),
+        title: const Text('Delete Note?', style: TextStyle(fontFamily: 'Satoshi', fontWeight: FontWeight.w600)),
+        content: const Text('Are you sure?', style: TextStyle(fontFamily: 'Satoshi', )),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: Text('Cancel', style: GoogleFonts.inter()),
+            child: const Text('Cancel', style: TextStyle(fontFamily: 'Satoshi', )),
           ),
           TextButton(
             onPressed: () {
               provider.deleteNote(note.id);
               Navigator.pop(ctx);
-              HapticFeedback.mediumImpact();
+              try { HapticFeedback.mediumImpact(); } catch (_) {}
             },
-            child: Text('Delete', style: GoogleFonts.inter(color: context.dangerColor)),
+            child: Text('Delete', style: TextStyle(fontFamily: 'Satoshi', color: context.dangerColor)),
           ),
         ],
       ),

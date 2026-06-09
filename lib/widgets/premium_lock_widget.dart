@@ -1,6 +1,5 @@
 import 'dart:ui' show ImageFilter;
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 import '../config/theme.dart';
 
 class PremiumLockWidget extends StatelessWidget {
@@ -67,7 +66,7 @@ class PremiumLockWidget extends StatelessWidget {
                         const SizedBox(height: 8),
                         Text(
                           'Premium Feature',
-                          style: GoogleFonts.inter(
+                          style: TextStyle(fontFamily: 'Satoshi', 
                             fontSize: 13,
                             fontWeight: FontWeight.w600,
                             color: cs.onSurface,
@@ -76,7 +75,7 @@ class PremiumLockWidget extends StatelessWidget {
                         const SizedBox(height: 2),
                         Text(
                           description ?? 'Upgrade to unlock $feature',
-                          style: GoogleFonts.inter(
+                          style: TextStyle(fontFamily: 'Satoshi', 
                             fontSize: 11,
                             color: cs.onSurfaceVariant,
                           ),
@@ -97,9 +96,9 @@ class PremiumLockWidget extends StatelessWidget {
                               padding: EdgeInsets.zero,
                               elevation: 0,
                             ),
-                            child: Text(
+                            child: const Text(
                               'Upgrade',
-                              style: GoogleFonts.inter(
+                              style: TextStyle(fontFamily: 'Satoshi', 
                                   fontSize: 13,
                                   fontWeight: FontWeight.w600),
                             ),

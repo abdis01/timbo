@@ -38,10 +38,7 @@ class DefaultFirebaseOptions {
           'you can reconfigure this by running the FlutterFire CLI again.',
         );
       case TargetPlatform.linux:
-        throw UnsupportedError(
-          'DefaultFirebaseOptions have not been configured for linux - '
-          'you can reconfigure this by running the FlutterFire CLI again.',
-        );
+        return linux;
       default:
         throw UnsupportedError(
           'DefaultFirebaseOptions are not supported for this platform.',
@@ -64,6 +61,15 @@ class DefaultFirebaseOptions {
     appId: '1:676323736878:android:4e3f10aadbb2e92a0dcebf',
     messagingSenderId: '676323736878',
     projectId: 'timbo-4fad8',
+    storageBucket: 'timbo-4fad8.firebasestorage.app',
+  );
+
+  static const FirebaseOptions linux = FirebaseOptions(
+    apiKey: 'AIzaSyDhZHw4-e5Mz10UmFgI1oxYmnLdhSKJS5c',
+    appId: '1:676323736878:web:b1db5f822097b3790dcebf',
+    messagingSenderId: '676323736878',
+    projectId: 'timbo-4fad8',
+    authDomain: 'timbo-4fad8.firebaseapp.com',
     storageBucket: 'timbo-4fad8.firebasestorage.app',
   );
 }

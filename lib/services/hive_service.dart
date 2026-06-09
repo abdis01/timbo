@@ -5,6 +5,7 @@ import '../models/expense_model.dart';
 import '../models/reminder_model.dart';
 import '../models/quick_capture_model.dart';
 import '../models/user_model.dart';
+import '../models/chat_message.dart';
 
 class HiveService {
   HiveService._();
@@ -17,6 +18,7 @@ class HiveService {
   late Box<ReminderModel> _remindersBox;
   late Box<QuickCaptureModel> _capturesBox;
   late Box<UserModel> _userBox;
+  late Box<ChatMessage> _chatBox;
 
   bool _initialized = false;
   bool get isInitialized => _initialized;
@@ -34,6 +36,7 @@ class HiveService {
     _registerAdapter(ReminderModelAdapter());
     _registerAdapter(QuickCaptureModelAdapter());
     _registerAdapter(UserModelAdapter());
+    _registerAdapter(ChatMessageAdapter());
 
     _notesBox = await Hive.openBox<NoteModel>(AppConstants.hiveNotesBox);
     _expensesBox =
@@ -43,6 +46,7 @@ class HiveService {
     _capturesBox =
         await Hive.openBox<QuickCaptureModel>(AppConstants.hiveCapturesBox);
     _userBox = await Hive.openBox<UserModel>(AppConstants.hiveUserBox);
+    _chatBox = await Hive.openBox<ChatMessage>(AppConstants.hiveChatBox);
 
     _initialized = true;
   }
@@ -50,10 +54,6 @@ class HiveService {
   // --- NOTES ---
 
   Future<void> saveNote(NoteModel note) async {
-    await _notesBox.put(note.id, note);
-  }
-
-  Future<void> saveNoteDirectly(NoteModel note) async {
     await _notesBox.put(note.id, note);
   }
 
@@ -84,10 +84,6 @@ class HiveService {
   // --- EXPENSES ---
 
   Future<void> saveExpense(ExpenseModel expense) async {
-    await _expensesBox.put(expense.id, expense);
-  }
-
-  Future<void> saveExpenseDirectly(ExpenseModel expense) async {
     await _expensesBox.put(expense.id, expense);
   }
 
@@ -139,10 +135,6 @@ class HiveService {
     await _remindersBox.put(reminder.id, reminder);
   }
 
-  Future<void> saveReminderDirectly(ReminderModel reminder) async {
-    await _remindersBox.put(reminder.id, reminder);
-  }
-
   List<ReminderModel> getAllReminders() =>
       _remindersBox.values.toList()
         ..sort((a, b) => a.scheduledAt.compareTo(b.scheduledAt));
@@ -186,10 +178,6 @@ class HiveService {
     await _capturesBox.put(capture.id, capture);
   }
 
-  Future<void> saveCaptureDirectly(QuickCaptureModel capture) async {
-    await _capturesBox.put(capture.id, capture);
-  }
-
   List<QuickCaptureModel> getAllCaptures() =>
       _capturesBox.values.toList()
         ..sort((a, b) => b.capturedAt.compareTo(a.capturedAt));
@@ -216,6 +204,10 @@ class HiveService {
   }
 
   UserModel? getUser() => _userBox.get(AppConstants.userKey);
+
+  Future<void> clearUser() async {
+    await _userBox.delete(AppConstants.userKey);
+  }
 
   Future<void> updateAIInteractionCount() async {
     final user = getUser();
@@ -250,12 +242,42 @@ class HiveService {
 
   Stream<BoxEvent> get userStream => _userBox.watch();
 
+  // --- CHAT ---
+
+  Future<void> saveChatMessage(ChatMessage msg) async {
+    await _chatBox.put(msg.id, msg);
+  }
+
+  List<ChatMessage> getChatHistory() {
+    final messages = _chatBox.values.toList()
+      ..sort((a, b) => a.timestamp.compareTo(b.timestamp));
+    if (messages.length > 100) {
+      return messages.sublist(messages.length - 100);
+    }
+    return messages;
+  }
+
+  Future<void> clearChatHistory() async {
+    await _chatBox.clear();
+  }
+
+  bool isTrialActive() {
+    final user = getUser();
+    if (user == null) return false;
+    if (user.isPremium) return false;
+    final trialStart = user.trialStartDate;
+    if (trialStart == null) return false;
+    final now = DateTime.now();
+    return now.difference(trialStart).inDays < 3;
+  }
+
   Future<void> dispose() async {
     await _notesBox.close();
     await _expensesBox.close();
     await _remindersBox.close();
     await _capturesBox.close();
     await _userBox.close();
+    await _chatBox.close();
     await Hive.close();
     _initialized = false;
   }
@@ -266,6 +288,7 @@ class HiveService {
     await _remindersBox.clear();
     await _capturesBox.clear();
     await _userBox.clear();
+    await _chatBox.clear();
   }
 
   void _registerAdapter<T>(TypeAdapter<T> adapter) {

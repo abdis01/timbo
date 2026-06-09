@@ -1,20 +1,22 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:math' as math;
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'package:vibration/vibration.dart';
 import '../config/theme.dart';
+import '../config/routes.dart';
 import '../models/quick_capture_model.dart';
 import '../models/expense_model.dart';
+import '../models/note_model.dart';
 import '../models/reminder_model.dart';
 import '../services/hive_service.dart';
 import '../services/notification_service.dart';
-import '../services/premium_service.dart';
 import '../providers/finance_provider.dart';
 import '../providers/reminders_provider.dart';
 import '../providers/notes_provider.dart';
@@ -38,7 +40,7 @@ class QuickCapturePopup extends StatefulWidget {
 }
 
 class _QuickCapturePopupState extends State<QuickCapturePopup>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
   CaptureCategory _selectedCategory = CaptureCategory.note;
 
   // NOTE fields
@@ -47,7 +49,7 @@ class _QuickCapturePopupState extends State<QuickCapturePopup>
   // EXPENSE fields
   final _amountController = TextEditingController();
   bool _isIncome = false;
-  String _expenseCategory = 'Food';
+  String _expenseCategory = 'Other';
   final _descriptionController = TextEditingController();
   String? _receiptPath;
 
@@ -61,7 +63,6 @@ class _QuickCapturePopupState extends State<QuickCapturePopup>
   // PHOTO fields
   String? _photoPath;
   final _photoCaptionController = TextEditingController();
-  bool _saveToGallery = true;
 
   // VOICE fields
   stt.SpeechToText? _speech;
@@ -78,9 +79,12 @@ class _QuickCapturePopupState extends State<QuickCapturePopup>
 
   // Save state
   bool _isSaving = false;
+  bool _showSaveAnimation = false;
 
   late AnimationController _slideController;
   late Animation<Offset> _slideAnimation;
+  late AnimationController _ringController;
+  late AnimationController _saveAnimController;
 
   final _picker = ImagePicker();
 
@@ -110,6 +114,15 @@ class _QuickCapturePopupState extends State<QuickCapturePopup>
       curve: Curves.easeOut,
     ));
     _slideController.forward();
+
+    _ringController = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 3),
+    )..repeat();
+    _saveAnimController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 800),
+    );
   }
 
   @override
@@ -122,6 +135,8 @@ class _QuickCapturePopupState extends State<QuickCapturePopup>
     _voiceNoteController.dispose();
     _recordingTimer?.cancel();
     _slideController.dispose();
+    _ringController.dispose();
+    _saveAnimController.dispose();
     super.dispose();
   }
 
@@ -133,9 +148,18 @@ class _QuickCapturePopupState extends State<QuickCapturePopup>
   }
 
   void _startVoiceRecording() async {
+    if (kIsWeb) {
+      return;
+    }
+    if (defaultTargetPlatform != TargetPlatform.android &&
+        defaultTargetPlatform != TargetPlatform.iOS) {
+      return;
+    }
     _speech ??= stt.SpeechToText();
     final available = await _speech!.initialize();
-    if (!available) return;
+    if (!available) {
+      return;
+    }
 
     setState(() {
       _isListening = true;
@@ -166,22 +190,30 @@ class _QuickCapturePopupState extends State<QuickCapturePopup>
 
   Future<void> _suggestCategory() async {
     if (_aiSuggestionLoading) return;
-    if (!PremiumService.instance.canUseAI()) return;
 
     setState(() => _aiSuggestionLoading = true);
 
-    try {
-      await PremiumService.instance.useInteraction();
-      setState(() {
-        _suggestedCategory = 'Personal';
-      });
-    } catch (_) {}
+    final text = _noteController.text.toLowerCase();
+    late String result;
 
-    setState(() => _aiSuggestionLoading = false);
+    if (text.contains('spent') || text.contains('cost') || text.contains('\$') || text.contains('paid')) {
+      result = 'Expense';
+    } else if (text.contains('remind') || text.contains('tomorrow') || text.contains('meeting')) {
+      result = 'Reminder';
+    } else {
+      result = 'Personal';
+    }
+
+    setState(() {
+      _suggestedCategory = result;
+      _aiSuggestionLoading = false;
+    });
   }
 
   Future<void> _save() async {
-    if (_isSaving) return;
+    if (_isSaving) {
+      return;
+    }
     setState(() => _isSaving = true);
 
     try {
@@ -194,12 +226,19 @@ class _QuickCapturePopupState extends State<QuickCapturePopup>
             _showError('Write something first');
             return;
           }
-          final note = QuickCaptureModel(
+          final quickCapture = QuickCaptureModel(
             type: 'text',
             content: content,
             capturedAt: now,
           );
-          await HiveService.instance.saveCapture(note);
+          await HiveService.instance.saveCapture(quickCapture);
+          final note = NoteModel(
+            title: content.length > 50 ? '${content.substring(0, 50)}...' : content,
+            content: content,
+            category: 'note',
+          );
+          await HiveService.instance.saveNote(note);
+          if (!mounted) return;
           await context.read<NotesProvider>().loadNotes();
 
         case CaptureCategory.expense:
@@ -222,6 +261,7 @@ class _QuickCapturePopupState extends State<QuickCapturePopup>
             receiptImagePath: _receiptPath,
           );
           await HiveService.instance.saveExpense(expense);
+          if (!mounted) return;
           await context.read<FinanceProvider>().loadFinanceData();
 
           final capture = QuickCaptureModel(
@@ -257,6 +297,7 @@ class _QuickCapturePopupState extends State<QuickCapturePopup>
             recurringDays: _isRecurring ? _recurringDays.toList() : null,
           );
           await HiveService.instance.saveReminder(reminder);
+          if (!mounted) return;
           await context.read<RemindersProvider>().loadReminders();
           await NotificationService.showInstantNotification(
             title: 'Reminder: $title',
@@ -283,6 +324,17 @@ class _QuickCapturePopupState extends State<QuickCapturePopup>
             capturedAt: now,
           );
           await HiveService.instance.saveCapture(capture);
+          final photoNote = NoteModel(
+            title: _photoCaptionController.text.trim().isNotEmpty
+                ? _photoCaptionController.text.trim()
+                : 'Photo capture',
+            content: _photoCaptionController.text.trim(),
+            mediaPaths: [path],
+            category: 'photo',
+          );
+          await HiveService.instance.saveNote(photoNote);
+          if (!mounted) return;
+          await context.read<NotesProvider>().loadNotes();
 
         case CaptureCategory.voice:
           final content = _voiceNoteController.text.trim();
@@ -296,6 +348,14 @@ class _QuickCapturePopupState extends State<QuickCapturePopup>
             capturedAt: now,
           );
           await HiveService.instance.saveCapture(capture);
+          final voiceNote = NoteModel(
+            title: content.length > 50 ? '${content.substring(0, 50)}...' : content,
+            content: content,
+            category: 'voice',
+          );
+          await HiveService.instance.saveNote(voiceNote);
+          if (!mounted) return;
+          await context.read<NotesProvider>().loadNotes();
       }
 
       try {
@@ -303,11 +363,15 @@ class _QuickCapturePopupState extends State<QuickCapturePopup>
       } catch (_) {}
 
       if (!mounted) return;
-      HapticFeedback.lightImpact();
+      setState(() => _showSaveAnimation = true);
+      _saveAnimController.forward();
+      await Future.delayed(const Duration(milliseconds: 1500));
+      if (!mounted) return;
+      try { HapticFeedback.lightImpact(); } catch (_) {}
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Saved \u2713',
-              style: GoogleFonts.inter(color: Colors.white)),
+          content: const Text('Saved \u2713',
+              style: TextStyle(fontFamily: 'Satoshi', color: Colors.white)),
           backgroundColor: context.primaryColor,
           duration: const Duration(seconds: 1),
         ),
@@ -324,7 +388,7 @@ class _QuickCapturePopupState extends State<QuickCapturePopup>
     setState(() => _isSaving = false);
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(message, style: GoogleFonts.inter(color: Colors.white)),
+        content: Text(message, style: const TextStyle(fontFamily: 'Satoshi', color: Colors.white)),
         backgroundColor: context.dangerColor,
       ),
     );
@@ -334,7 +398,6 @@ class _QuickCapturePopupState extends State<QuickCapturePopup>
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final cs = Theme.of(context).colorScheme;
-    final bg = Theme.of(context).scaffoldBackgroundColor;
     final textPrimary = cs.onSurface;
     final textSecondary = cs.onSurfaceVariant;
     final primary = cs.primary;
@@ -345,45 +408,80 @@ class _QuickCapturePopupState extends State<QuickCapturePopup>
       maxChildSize: 0.9,
       builder: (context, scrollController) {
         return Container(
-          decoration: BoxDecoration(
-            color: bg,
-            borderRadius: const BorderRadius.vertical(
+          decoration: const BoxDecoration(
+            borderRadius: BorderRadius.vertical(
               top: Radius.circular(AppRadius.lg),
             ),
           ),
-          child: Column(
-            children: [
-              _buildDragHandle(isDark),
-              Expanded(
-                child: SingleChildScrollView(
-                  controller: scrollController,
-                  padding: const EdgeInsets.fromLTRB(
-                    AppSpacing.lg,
-                    0,
-                    AppSpacing.lg,
-                    AppSpacing.lg,
-                  ),
-                  child: SlideTransition(
-                    position: _slideAnimation,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        _buildCategorySelector(primary, textPrimary, isDark),
-                        const SizedBox(height: AppSpacing.lg),
-                        _buildDynamicContent(
-                          primary, textPrimary, textSecondary, isDark),
-                        const SizedBox(height: AppSpacing.md),
-                        _buildAiSuggestion(
-                          primary, textPrimary, textSecondary, isDark),
-                        const SizedBox(height: AppSpacing.md),
-                        _buildBottomActionBar(primary, textSecondary, isDark),
-                        const SizedBox(height: AppSpacing.md),
-                      ],
-                    ),
-                  ),
+          child: ClipRRect(
+            borderRadius: const BorderRadius.vertical(
+              top: Radius.circular(AppRadius.lg),
+            ),
+            child: Stack(
+              children: [
+                // Background
+                Container(
+                  color: Theme.of(context).colorScheme.surface,
                 ),
-              ),
-            ],
+                // Expanding rings
+                AnimatedBuilder(
+                  animation: _ringController,
+                  builder: (context, child) {
+                    return CustomPaint(
+                      painter: _RingPainter(
+                        progress: _ringController.value,
+                        color: Theme.of(context).colorScheme.primary,
+                      ),
+                      size: Size.infinite,
+                    );
+                  },
+                ),
+                // Content
+                Column(
+                  children: [
+                    _buildDragHandle(isDark),
+                    Expanded(
+                      child: Stack(
+                        children: [
+                          SingleChildScrollView(
+                            controller: scrollController,
+                            padding: const EdgeInsets.fromLTRB(
+                              AppSpacing.lg,
+                              0,
+                              AppSpacing.lg,
+                              AppSpacing.lg,
+                            ),
+                            child: SlideTransition(
+                              position: _slideAnimation,
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  _buildCategorySelector(primary, textPrimary, isDark),
+                                  const SizedBox(height: AppSpacing.lg),
+                                  _buildDynamicContent(
+                                    primary, textPrimary, textSecondary, isDark),
+                                  const SizedBox(height: AppSpacing.md),
+                                  _buildAiSuggestion(
+                                    primary, textPrimary, textSecondary, isDark),
+                                  const SizedBox(height: AppSpacing.md),
+                                  _buildChatWithAi(primary, textPrimary, textSecondary, isDark),
+                                  const SizedBox(height: AppSpacing.md),
+                                  _buildBottomActionBar(primary, textSecondary, isDark),
+                                  const SizedBox(height: AppSpacing.md),
+                                ],
+                              ),
+                            ),
+                          ),
+                          // Save animation overlay
+                          if (_showSaveAnimation)
+                            _buildSaveOverlay(primary, textPrimary),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
         );
       },
@@ -429,7 +527,7 @@ class _QuickCapturePopupState extends State<QuickCapturePopup>
             padding: EdgeInsets.only(right: i < categories.length - 1 ? 8 : 0),
             child: GestureDetector(
               onTap: () {
-                HapticFeedback.selectionClick();
+                try { HapticFeedback.selectionClick(); } catch (_) {}
                 setState(() => _selectedCategory = cat.$1);
               },
               child: AnimatedContainer(
@@ -459,7 +557,7 @@ class _QuickCapturePopupState extends State<QuickCapturePopup>
                     const SizedBox(width: 6),
                     Text(
                       cat.$3,
-                      style: GoogleFonts.inter(
+                      style: TextStyle(fontFamily: 'Satoshi', 
                         fontSize: 13,
                         fontWeight:
                             isSelected ? FontWeight.w600 : FontWeight.w500,
@@ -509,10 +607,10 @@ class _QuickCapturePopupState extends State<QuickCapturePopup>
           controller: _noteController,
           maxLines: 6,
           minLines: 3,
-          style: GoogleFonts.inter(fontSize: 16, color: textPrimary),
+          style: TextStyle(fontFamily: 'Satoshi', fontSize: 16, color: textPrimary),
           decoration: InputDecoration(
             hintText: "What's on your mind?",
-            hintStyle: GoogleFonts.inter(color: textSecondary.withValues(alpha: 0.5)),
+            hintStyle: TextStyle(fontFamily: 'Satoshi', color: textSecondary.withValues(alpha: 0.5)),
             border: InputBorder.none,
             enabledBorder: InputBorder.none,
             focusedBorder: InputBorder.none,
@@ -533,12 +631,12 @@ class _QuickCapturePopupState extends State<QuickCapturePopup>
                     child: CircularProgressIndicator(strokeWidth: 2),
                   )
                 else
-                  Icon(Icons.auto_awesome_rounded,
+                  Icon(Icons.psychology_rounded,
                       size: 14, color: primary.withValues(alpha: 0.7)),
                 const SizedBox(width: 6),
                 Text(
                   'Suggest category',
-                  style: GoogleFonts.inter(
+                  style: TextStyle(fontFamily: 'Satoshi', 
                     fontSize: 12,
                     color: primary.withValues(alpha: 0.7),
                   ),
@@ -563,7 +661,7 @@ class _QuickCapturePopupState extends State<QuickCapturePopup>
           children: [
             Text(
               '\$',
-              style: GoogleFonts.sora(
+              style: TextStyle(fontFamily: 'Satoshi', 
                 fontSize: 28,
                 fontWeight: FontWeight.w700,
                 color: textPrimary,
@@ -574,14 +672,14 @@ class _QuickCapturePopupState extends State<QuickCapturePopup>
               child: TextField(
                 controller: _amountController,
                 keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                style: GoogleFonts.sora(
+                style: TextStyle(fontFamily: 'Satoshi', 
                   fontSize: 28,
                   fontWeight: FontWeight.w700,
                   color: textPrimary,
                 ),
                 decoration: InputDecoration(
                   hintText: '0.00',
-                  hintStyle: GoogleFonts.sora(
+                  hintStyle: TextStyle(fontFamily: 'Satoshi', 
                     fontSize: 28,
                     fontWeight: FontWeight.w700,
                     color: textSecondary.withValues(alpha: 0.3),
@@ -606,7 +704,7 @@ class _QuickCapturePopupState extends State<QuickCapturePopup>
         ),
         const SizedBox(height: AppSpacing.md),
         Text('Category',
-            style: GoogleFonts.inter(
+            style: TextStyle(fontFamily: 'Satoshi', 
                 fontSize: 13,
                 fontWeight: FontWeight.w500,
                 color: textSecondary)),
@@ -633,7 +731,7 @@ class _QuickCapturePopupState extends State<QuickCapturePopup>
                 ),
                 child: Text(
                   cat,
-                  style: GoogleFonts.inter(
+                  style: TextStyle(fontFamily: 'Satoshi', 
                     fontSize: 13,
                     color: selected ? primary : textPrimary,
                     fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
@@ -647,10 +745,10 @@ class _QuickCapturePopupState extends State<QuickCapturePopup>
         TextField(
           controller: _descriptionController,
           maxLines: 2,
-          style: GoogleFonts.inter(fontSize: 14, color: textPrimary),
+          style: TextStyle(fontFamily: 'Satoshi', fontSize: 14, color: textPrimary),
           decoration: InputDecoration(
             hintText: 'Description (optional)',
-            hintStyle: GoogleFonts.inter(
+            hintStyle: TextStyle(fontFamily: 'Satoshi', 
                 color: textSecondary.withValues(alpha: 0.5)),
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(AppRadius.sm),
@@ -682,7 +780,7 @@ class _QuickCapturePopupState extends State<QuickCapturePopup>
               const SizedBox(width: 6),
               Text(
                 _receiptPath != null ? 'Receipt added' : 'Add receipt photo',
-                style: GoogleFonts.inter(
+                style: TextStyle(fontFamily: 'Satoshi', 
                     fontSize: 13, color: textSecondary),
               ),
             ],
@@ -718,7 +816,7 @@ class _QuickCapturePopupState extends State<QuickCapturePopup>
         ),
         child: Text(
           label,
-          style: GoogleFonts.inter(
+          style: TextStyle(fontFamily: 'Satoshi', 
             fontSize: 13,
             fontWeight: FontWeight.w500,
             color: selected ? primary : textPrimary,
@@ -742,10 +840,10 @@ class _QuickCapturePopupState extends State<QuickCapturePopup>
       children: [
         TextField(
           controller: _reminderTitleController,
-          style: GoogleFonts.inter(fontSize: 16, color: textPrimary),
+          style: TextStyle(fontFamily: 'Satoshi', fontSize: 16, color: textPrimary),
           decoration: InputDecoration(
             hintText: 'Remind me to...',
-            hintStyle: GoogleFonts.inter(
+            hintStyle: TextStyle(fontFamily: 'Satoshi', 
                 color: textSecondary.withValues(alpha: 0.5)),
             border: InputBorder.none,
             enabledBorder: InputBorder.none,
@@ -766,13 +864,13 @@ class _QuickCapturePopupState extends State<QuickCapturePopup>
         Row(
           children: [
             Text('Recurring',
-                style: GoogleFonts.inter(
+                style: TextStyle(fontFamily: 'Satoshi', 
                     fontSize: 14,
                     color: textPrimary)),
             const Spacer(),
             Switch(
               value: _isRecurring,
-              activeColor: primary,
+              activeThumbColor: primary,
               onChanged: (v) => setState(() => _isRecurring = v),
             ),
           ],
@@ -809,7 +907,7 @@ class _QuickCapturePopupState extends State<QuickCapturePopup>
                   ),
                   child: Text(
                     _weekDays[i],
-                    style: GoogleFonts.inter(
+                    style: TextStyle(fontFamily: 'Satoshi', 
                       fontSize: 13,
                       color: selected ? primary : textPrimary,
                       fontWeight:
@@ -858,7 +956,7 @@ class _QuickCapturePopupState extends State<QuickCapturePopup>
                 size: 16, color: primary),
             const SizedBox(width: 8),
             Text(dateStr,
-                style: GoogleFonts.inter(
+                style: TextStyle(fontFamily: 'Satoshi', 
                     fontSize: 14, color: textPrimary)),
           ],
         ),
@@ -897,7 +995,7 @@ class _QuickCapturePopupState extends State<QuickCapturePopup>
                 size: 16, color: primary),
             const SizedBox(width: 8),
             Text(timeStr,
-                style: GoogleFonts.inter(
+                style: TextStyle(fontFamily: 'Satoshi', 
                     fontSize: 14, color: textPrimary)),
           ],
         ),
@@ -936,13 +1034,13 @@ class _QuickCapturePopupState extends State<QuickCapturePopup>
                       size: 48, color: textSecondary.withValues(alpha: 0.5)),
                   const SizedBox(height: 12),
                   Text('Tap to open camera',
-                      style: GoogleFonts.inter(
+                      style: TextStyle(fontFamily: 'Satoshi', 
                           fontSize: 14, color: textSecondary)),
                   const SizedBox(height: 4),
                   GestureDetector(
                     onTap: () => _pickImage(ImageSource.gallery),
                     child: Text('Or pick from gallery',
-                        style: GoogleFonts.inter(
+                        style: TextStyle(fontFamily: 'Satoshi', 
                             fontSize: 13,
                             color: primary,
                             decoration: TextDecoration.underline)),
@@ -960,12 +1058,14 @@ class _QuickCapturePopupState extends State<QuickCapturePopup>
       children: [
         ClipRRect(
           borderRadius: BorderRadius.circular(AppRadius.md),
-          child: Image.file(
-            File(_photoPath!),
-            height: 180,
-            width: double.infinity,
-            fit: BoxFit.cover,
-          ),
+          child: kIsWeb
+              ? Image.network(_photoPath!, height: 180, width: double.infinity, fit: BoxFit.cover)
+              : Image.file(
+                  File(_photoPath!),
+                  height: 180,
+                  width: double.infinity,
+                  fit: BoxFit.cover,
+                ),
         ),
         const SizedBox(height: AppSpacing.sm),
         Row(
@@ -987,36 +1087,21 @@ class _QuickCapturePopupState extends State<QuickCapturePopup>
                         size: 14, color: textSecondary),
                     const SizedBox(width: 4),
                     Text('Retake',
-                        style: GoogleFonts.inter(
+                        style: TextStyle(fontFamily: 'Satoshi', 
                             fontSize: 13, color: textSecondary)),
                   ],
                 ),
               ),
-            ),
-            const Spacer(),
-            Row(
-              children: [
-                Text('Save to gallery',
-                    style: GoogleFonts.inter(
-                        fontSize: 13, color: textSecondary)),
-                const SizedBox(width: 4),
-                Switch(
-                  value: _saveToGallery,
-                  activeColor: primary,
-                  onChanged: (v) => setState(() => _saveToGallery = v),
-                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                ),
-              ],
             ),
           ],
         ),
         const SizedBox(height: AppSpacing.sm),
         TextField(
           controller: _photoCaptionController,
-          style: GoogleFonts.inter(fontSize: 14, color: textPrimary),
+          style: TextStyle(fontFamily: 'Satoshi', fontSize: 14, color: textPrimary),
           decoration: InputDecoration(
             hintText: 'Add a caption...',
-            hintStyle: GoogleFonts.inter(
+            hintStyle: TextStyle(fontFamily: 'Satoshi', 
                 color: textSecondary.withValues(alpha: 0.5)),
             border: InputBorder.none,
             enabledBorder: InputBorder.none,
@@ -1058,7 +1143,7 @@ class _QuickCapturePopupState extends State<QuickCapturePopup>
           Center(
               child: Text(
                 'Tap to stop',
-                style: GoogleFonts.inter(
+                style: TextStyle(fontFamily: 'Satoshi', 
                   fontSize: 14,
                   color: context.dangerColor,
                   fontWeight: FontWeight.w500,
@@ -1069,7 +1154,7 @@ class _QuickCapturePopupState extends State<QuickCapturePopup>
           Center(
             child: Text(
               _formatDuration(_recordingSeconds),
-              style: GoogleFonts.inter(
+              style: TextStyle(fontFamily: 'Satoshi', 
                 fontSize: 32,
                 fontWeight: FontWeight.w300,
                 color: textPrimary,
@@ -1087,7 +1172,7 @@ class _QuickCapturePopupState extends State<QuickCapturePopup>
               ),
               child: Text(
                 _voiceTranscript,
-                style: GoogleFonts.inter(fontSize: 14, color: textPrimary),
+                style: TextStyle(fontFamily: 'Satoshi', fontSize: 14, color: textPrimary),
               ),
             ),
           ],
@@ -1117,7 +1202,7 @@ class _QuickCapturePopupState extends State<QuickCapturePopup>
         Center(
           child: Text(
             'Tap to start recording',
-            style: GoogleFonts.inter(
+            style: TextStyle(fontFamily: 'Satoshi', 
                 fontSize: 14, color: textSecondary),
           ),
         ),
@@ -1125,10 +1210,10 @@ class _QuickCapturePopupState extends State<QuickCapturePopup>
         TextField(
           controller: _voiceNoteController,
           maxLines: 3,
-          style: GoogleFonts.inter(fontSize: 14, color: textPrimary),
+          style: TextStyle(fontFamily: 'Satoshi', fontSize: 14, color: textPrimary),
           decoration: InputDecoration(
             hintText: 'Or type the note manually...',
-            hintStyle: GoogleFonts.inter(
+            hintStyle: TextStyle(fontFamily: 'Satoshi', 
                 color: textSecondary.withValues(alpha: 0.5)),
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(AppRadius.sm),
@@ -1182,12 +1267,12 @@ class _QuickCapturePopupState extends State<QuickCapturePopup>
             child: Text.rich(
               TextSpan(
                 text: 'Timbo thinks: ',
-                style: GoogleFonts.inter(
+                style: TextStyle(fontFamily: 'Satoshi', 
                     fontSize: 13, color: textSecondary),
                 children: [
                   TextSpan(
                     text: _suggestedCategory,
-                    style: GoogleFonts.inter(
+                    style: TextStyle(fontFamily: 'Satoshi', 
                       fontSize: 13,
                       fontWeight: FontWeight.w600,
                       color: textPrimary,
@@ -1207,8 +1292,8 @@ class _QuickCapturePopupState extends State<QuickCapturePopup>
                 color: primary,
                 borderRadius: BorderRadius.circular(AppRadius.full),
               ),
-              child: Text('Yes',
-                  style: GoogleFonts.inter(
+              child: const Text('Yes',
+                  style: TextStyle(fontFamily: 'Satoshi', 
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
                       color: Colors.white)),
@@ -1226,11 +1311,70 @@ class _QuickCapturePopupState extends State<QuickCapturePopup>
                 border: Border.all(color: textSecondary.withValues(alpha: 0.4)),
               ),
               child: Text('No',
-                  style: GoogleFonts.inter(
+                  style: TextStyle(fontFamily: 'Satoshi', 
                       fontSize: 12, color: textSecondary)),
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildChatWithAi(
+    Color primary,
+    Color textPrimary,
+    Color textSecondary,
+    bool isDark,
+  ) {
+    return GestureDetector(
+      onTap: () {
+        Navigator.pop(context);
+        Navigator.pushNamed(context, AppRoutes.chat);
+      },
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: primary.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(AppRadius.sm),
+          border: Border.all(color: primary.withValues(alpha: 0.3)),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 34, height: 34,
+              decoration: BoxDecoration(
+                color: primary.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(AppRadius.sm),
+              ),
+               child: Icon(Icons.psychology_rounded, size: 18, color: primary),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Chat with Timbo AI',
+                    style: TextStyle(fontFamily: 'Satoshi',
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: textPrimary,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    'Ask questions, get advice, and more',
+                    style: TextStyle(fontFamily: 'Satoshi',
+                      fontSize: 12,
+                      color: textSecondary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Icon(Icons.chevron_right_rounded, size: 20, color: textSecondary),
+          ],
+        ),
       ),
     );
   }
@@ -1253,18 +1397,6 @@ class _QuickCapturePopupState extends State<QuickCapturePopup>
         children: [
           Row(
             children: [
-              _actionIcon(Icons.mic_rounded, 'Voice', () {
-                setState(() => _selectedCategory = CaptureCategory.voice);
-              }, textSecondary),
-              const SizedBox(width: 16),
-              _actionIcon(Icons.camera_alt_rounded, 'Camera', () {
-                if (_selectedCategory == CaptureCategory.photo) {
-                  _pickImage(ImageSource.camera);
-                } else {
-                  setState(() => _selectedCategory = CaptureCategory.photo);
-                }
-              }, textSecondary),
-              const SizedBox(width: 16),
               _actionIcon(Icons.photo_library_rounded, 'Gallery', () {
                 _pickImage(ImageSource.gallery);
               }, textSecondary),
@@ -1288,9 +1420,9 @@ class _QuickCapturePopupState extends State<QuickCapturePopup>
                         color: Colors.white,
                       ),
                     )
-                  : Text(
+                  : const Text(
                       'Save',
-                      style: GoogleFonts.inter(
+                      style: TextStyle(fontFamily: 'Satoshi', 
                         fontSize: 14,
                         fontWeight: FontWeight.w600,
                         color: Colors.white,
@@ -1299,6 +1431,62 @@ class _QuickCapturePopupState extends State<QuickCapturePopup>
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildSaveOverlay(Color primary, Color textPrimary) {
+    return AnimatedBuilder(
+      animation: _saveAnimController,
+      builder: (context, child) {
+        final progress = _saveAnimController.value;
+        return Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Contract text
+              if (progress < 0.3)
+                Transform.scale(
+                  scale: 1.0 - progress / 0.3,
+                  child: Opacity(
+                    opacity: 1.0 - progress / 0.3,
+                    child: child,
+                  ),
+                ),
+              // Checkmark
+              if (progress >= 0.3) ...[
+                SizedBox(
+                  width: 80,
+                  height: 80,
+                  child: CustomPaint(
+                    painter: _SaveCheckPainter(
+                      progress: ((progress - 0.3) / 0.3).clamp(0.0, 1.0),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Opacity(
+                  opacity: ((progress - 0.6) / 0.2).clamp(0.0, 1.0),
+                  child: const Text(
+                    'Saved',
+                    style: TextStyle(fontFamily: 'Satoshi', 
+                      fontSize: 18,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        );
+      },
+      child: const Text(
+        'Saving...',
+        style: TextStyle(fontFamily: 'Satoshi', 
+          fontSize: 18,
+          color: Colors.white,
+        ),
       ),
     );
   }
@@ -1317,10 +1505,93 @@ class _QuickCapturePopupState extends State<QuickCapturePopup>
           Icon(icon, size: 22, color: textSecondary),
           const SizedBox(height: 2),
           Text(label,
-              style: GoogleFonts.inter(
+              style: TextStyle(fontFamily: 'Satoshi', 
                   fontSize: 10, color: textSecondary)),
         ],
       ),
     );
   }
+}
+
+class _RingPainter extends CustomPainter {
+  final double progress;
+  final Color color;
+  _RingPainter({required this.progress, required this.color});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = Offset(size.width / 2, size.height / 2);
+    final maxRadius = math.sqrt(size.width * size.width + size.height * size.height) / 2;
+
+    for (int i = 0; i < 3; i++) {
+      final offset = i * 0.33;
+      final t = ((progress - offset) % 1.0).clamp(0.0, 1.0);
+      final radius = maxRadius * t;
+      final alpha = (0.15 * (1 - t)).clamp(0.0, 0.15);
+
+      final paint = Paint()
+        ..color = color.withValues(alpha: alpha)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.5;
+      canvas.drawCircle(center, radius, paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(_RingPainter oldDelegate) =>
+      oldDelegate.progress != progress;
+}
+
+class _SaveCheckPainter extends CustomPainter {
+  final double progress;
+  _SaveCheckPainter({required this.progress});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = Colors.white
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 3
+      ..strokeCap = StrokeCap.round;
+
+    final center = Offset(size.width / 2, size.height / 2);
+    final radius = size.width / 2 - 4;
+
+    if (progress < 0.5) {
+      final circleProgress = (progress / 0.5).clamp(0.0, 1.0);
+      canvas.drawArc(
+        Rect.fromCircle(center: center, radius: radius),
+        -math.pi / 2,
+        2 * math.pi * circleProgress,
+        false,
+        paint,
+      );
+    } else {
+      canvas.drawCircle(center, radius, paint);
+      final checkProgress = ((progress - 0.5) / 0.5).clamp(0.0, 1.0);
+      final path = Path();
+      final startX = center.dx - radius * 0.3;
+      final startY = center.dy;
+      final midX = center.dx - radius * 0.05;
+      final midY = center.dy + radius * 0.3;
+      final endX = center.dx + radius * 0.4;
+      final endY = center.dy - radius * 0.25;
+
+      if (checkProgress < 0.5) {
+        final t = checkProgress / 0.5;
+        path.moveTo(startX, startY);
+        path.lineTo(startX + (midX - startX) * t, startY + (midY - startY) * t);
+      } else {
+        final t = (checkProgress - 0.5) / 0.5;
+        path.moveTo(startX, startY);
+        path.lineTo(midX, midY);
+        path.lineTo(midX + (endX - midX) * t, midY + (endY - midY) * t);
+      }
+      canvas.drawPath(path, paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(_SaveCheckPainter oldDelegate) =>
+      oldDelegate.progress != progress;
 }

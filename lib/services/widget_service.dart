@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:home_widget/home_widget.dart';
 import '../providers/finance_provider.dart';
 import '../services/hive_service.dart';
@@ -6,8 +7,16 @@ class WidgetService {
   static final WidgetService instance = WidgetService._();
   WidgetService._();
 
+  bool get _isSupported {
+    final platform = defaultTargetPlatform;
+    return platform == TargetPlatform.android || platform == TargetPlatform.iOS;
+  }
+
   void initialize() {
-    HomeWidget.registerInteractivityCallback(_onWidgetClick);
+    if (!_isSupported) return;
+    try {
+      HomeWidget.registerInteractivityCallback(_onWidgetClick);
+    } catch (_) {}
   }
 
   Future<void> _onWidgetClick(Uri? uri) async {
@@ -15,17 +24,18 @@ class WidgetService {
 
     switch (uri.toString()) {
       case 'timbo://quick_capture':
-        // Quick capture — handled via notification service in app.dart
         break;
       case 'timbo://finance':
-        // Navigate to finance — handled in app.dart
         break;
     }
   }
 
   Future<void> updateWidget(FinanceProvider financeProvider) async {
-    await _updateWidgetData(financeProvider);
-    await _updateWidget();
+    if (!_isSupported) return;
+    try {
+      await _updateWidgetData(financeProvider);
+      await _updateWidget();
+    } catch (_) {}
   }
 
   Future<void> _updateWidgetData(FinanceProvider financeProvider) async {

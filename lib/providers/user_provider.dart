@@ -22,6 +22,10 @@ class UserProvider extends ChangeNotifier {
     if (_user != null) {
       _isDarkMode = _user!.darkModeEnabled;
       await HiveService.instance.resetDailyLimitsIfNeeded();
+      if (_user!.trialStartDate == null) {
+        _user!.trialStartDate = DateTime.now();
+        await HiveService.instance.saveUser(_user!);
+      }
     }
 
     _isLoading = false;

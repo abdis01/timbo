@@ -1,60 +1,79 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import '../config/theme.dart';
 
-class InsightType {
-  final String id;
-  final String label;
-  final IconData icon;
-  final Color color;
-  final String? ctaLabel;
-  final String? ctaRoute;
+enum InsightType {
+  finance,
+  reminder,
+  notePattern,
+  generalAdvice,
+}
 
-  const InsightType({
-    required this.id,
-    required this.label,
-    required this.icon,
-    required this.color,
-    this.ctaLabel,
-    this.ctaRoute,
-  });
+extension InsightTypeDisplay on InsightType {
+  String get label {
+    switch (this) {
+      case InsightType.finance:
+        return 'Finance Insight';
+      case InsightType.reminder:
+        return 'Reminder Insight';
+      case InsightType.notePattern:
+        return 'Note Pattern';
+      case InsightType.generalAdvice:
+        return 'General Advice';
+    }
+  }
 
-  static const finance = InsightType(
-    id: 'finance',
-    label: 'Finance Insight',
-    icon: Icons.wallet_rounded,
-    color: Color(0xFFF59E0B),
-    ctaLabel: 'View Finance →',
-    ctaRoute: '/finance',
-  );
+  IconData get icon {
+    switch (this) {
+      case InsightType.finance:
+        return Icons.wallet_rounded;
+      case InsightType.reminder:
+        return Icons.notifications_rounded;
+      case InsightType.notePattern:
+        return Icons.edit_note_rounded;
+      case InsightType.generalAdvice:
+        return Icons.psychology_rounded;
+    }
+  }
 
-  static const reminder = InsightType(
-    id: 'reminder',
-    label: 'Reminder Insight',
-    icon: Icons.notifications_rounded,
-    color: Color(0xFF3B82F6),
-    ctaLabel: 'View Reminders →',
-    ctaRoute: '/reminders',
-  );
+  Color get color {
+    switch (this) {
+      case InsightType.finance:
+        return const Color(0xFFF59E0B);
+      case InsightType.reminder:
+        return const Color(0xFF3B82F6);
+      case InsightType.notePattern:
+        return const Color(0xFF7C5CFC);
+      case InsightType.generalAdvice:
+        return const Color(0xFF34D399);
+    }
+  }
 
-  static const notePattern = InsightType(
-    id: 'note_pattern',
-    label: 'Note Pattern',
-    icon: Icons.edit_note_rounded,
-    color: Color(0xFF7C5CFC),
-    ctaLabel: 'View Notes →',
-    ctaRoute: '/notes',
-  );
+  String? get ctaLabel {
+    switch (this) {
+      case InsightType.finance:
+        return 'View Finance →';
+      case InsightType.reminder:
+        return 'View Reminders →';
+      case InsightType.notePattern:
+        return 'View Notes →';
+      case InsightType.generalAdvice:
+        return null;
+    }
+  }
 
-  static const generalAdvice = InsightType(
-    id: 'general_advice',
-    label: 'General Advice',
-    icon: Icons.lightbulb_rounded,
-    color: Color(0xFF34D399),
-  );
-
-  static const values = [finance, reminder, notePattern, generalAdvice];
+  String? get ctaRoute {
+    switch (this) {
+      case InsightType.finance:
+        return '/finance';
+      case InsightType.reminder:
+        return '/reminders';
+      case InsightType.notePattern:
+        return '/notes';
+      case InsightType.generalAdvice:
+        return null;
+    }
+  }
 }
 
 class InsightCard extends StatelessWidget {
@@ -127,7 +146,7 @@ class InsightCard extends StatelessWidget {
                         Expanded(
                           child: Text(
                             type.label,
-                            style: GoogleFonts.inter(
+                            style: TextStyle(fontFamily: 'Satoshi', 
                               fontSize: 13,
                               fontWeight: FontWeight.w600,
                               color: textPrimary.withValues(alpha: isLocked ? 0.5 : 1),
@@ -142,7 +161,7 @@ class InsightCard extends StatelessWidget {
                     const SizedBox(height: 10),
                     Text(
                       text,
-                      style: GoogleFonts.inter(
+                      style: TextStyle(fontFamily: 'Satoshi', 
                         fontSize: 14,
                         height: 1.45,
                         color: isLocked
@@ -155,7 +174,7 @@ class InsightCard extends StatelessWidget {
                       children: [
                         Text(
                           'Generated ${DateFormat('MMMM d').format(generatedAt)} at ${DateFormat('h:mm a').format(generatedAt)}',
-                          style: GoogleFonts.inter(
+                          style: TextStyle(fontFamily: 'Satoshi', 
                             fontSize: 11,
                             color: textSecondary.withValues(alpha: 0.5),
                           ),
@@ -166,7 +185,7 @@ class InsightCard extends StatelessWidget {
                             onTap: onCtaTap,
                             child: Text(
                               type.ctaLabel!,
-                              style: GoogleFonts.inter(
+                              style: TextStyle(fontFamily: 'Satoshi', 
                                 fontSize: 13,
                                 fontWeight: FontWeight.w600,
                                 color: type.color,

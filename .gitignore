@@ -43,6 +43,10 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+/android/build/
 
 # Secrets — never commit API keys
 /lib/config/secrets.dart
+
+# Flutterwave API keys
+/lib/config/flutterwave_config.dart

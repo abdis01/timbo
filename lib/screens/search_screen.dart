@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../config/theme.dart';
@@ -114,7 +113,7 @@ class _SearchScreenState extends State<SearchScreen> {
       {int maxLines = 2}) {
     if (query.isEmpty) {
       return Text(text,
-          style: GoogleFonts.inter(fontSize: 14, color: baseColor),
+          style: TextStyle(fontFamily: 'Satoshi', fontSize: 14, color: baseColor),
           maxLines: maxLines,
           overflow: TextOverflow.ellipsis);
     }
@@ -130,12 +129,12 @@ class _SearchScreenState extends State<SearchScreen> {
       if (idx > start) {
         spans.add(TextSpan(
           text: text.substring(start, idx),
-          style: GoogleFonts.inter(fontSize: 14, color: baseColor),
+          style: TextStyle(fontFamily: 'Satoshi', fontSize: 14, color: baseColor),
         ));
       }
       spans.add(TextSpan(
         text: text.substring(idx, idx + q.length),
-        style: GoogleFonts.inter(
+        style: TextStyle(fontFamily: 'Satoshi', 
           fontSize: 14, color: baseColor, fontWeight: FontWeight.w700,
         ),
       ));
@@ -145,7 +144,7 @@ class _SearchScreenState extends State<SearchScreen> {
     if (start < text.length) {
       spans.add(TextSpan(
         text: text.substring(start),
-        style: GoogleFonts.inter(fontSize: 14, color: baseColor),
+        style: TextStyle(fontFamily: 'Satoshi', fontSize: 14, color: baseColor),
       ));
     }
 
@@ -204,10 +203,10 @@ class _SearchScreenState extends State<SearchScreen> {
               child: TextField(
                 controller: _searchController,
                 focusNode: _focusNode,
-                style: GoogleFonts.inter(fontSize: 16, color: cs.onSurface),
+                style: TextStyle(fontFamily: 'Satoshi', fontSize: 16, color: cs.onSurface),
                 decoration: InputDecoration(
                   hintText: 'Search notes, expenses, reminders...',
-                  hintStyle: GoogleFonts.inter(color: cs.onSurfaceVariant.withValues(alpha: 0.5)),
+                  hintStyle: TextStyle(fontFamily: 'Satoshi', color: cs.onSurfaceVariant.withValues(alpha: 0.5)),
                   prefixIcon: Icon(Icons.search_rounded, color: cs.onSurfaceVariant, size: 22),
                   suffixIcon: _searchController.text.isNotEmpty
                       ? IconButton(
@@ -243,7 +242,7 @@ class _SearchScreenState extends State<SearchScreen> {
       padding: const EdgeInsets.all(16),
       children: [
         Text('Recent Searches',
-            style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w600, color: cs.onSurface)),
+            style: TextStyle(fontFamily: 'Satoshi', fontSize: 16, fontWeight: FontWeight.w600, color: cs.onSurface)),
         if (_recentSearches.isNotEmpty) ...[
           const SizedBox(height: 12),
           Wrap(
@@ -262,7 +261,7 @@ class _SearchScreenState extends State<SearchScreen> {
                     children: [
                       Icon(Icons.history_rounded, size: 14, color: cs.onSurfaceVariant),
                       const SizedBox(width: 6),
-                      Text(s, style: GoogleFonts.inter(fontSize: 13, color: cs.onSurface)),
+                      Text(s, style: TextStyle(fontFamily: 'Satoshi', fontSize: 13, color: cs.onSurface)),
                     ],
                   ),
                 ),
@@ -272,7 +271,7 @@ class _SearchScreenState extends State<SearchScreen> {
         ],
         const SizedBox(height: 24),
         Text('Search Tips',
-            style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w600, color: cs.onSurface)),
+            style: TextStyle(fontFamily: 'Satoshi', fontSize: 16, fontWeight: FontWeight.w600, color: cs.onSurface)),
         const SizedBox(height: 12),
         _searchTip(Icons.article_outlined, 'Search note titles and content', cs),
         const SizedBox(height: 6),
@@ -288,7 +287,7 @@ class _SearchScreenState extends State<SearchScreen> {
       children: [
         Icon(icon, size: 16, color: cs.onSurfaceVariant.withValues(alpha: 0.6)),
         const SizedBox(width: 8),
-        Text(text, style: GoogleFonts.inter(fontSize: 13, color: cs.onSurfaceVariant.withValues(alpha: 0.7))),
+        Text(text, style: TextStyle(fontFamily: 'Satoshi', fontSize: 13, color: cs.onSurfaceVariant.withValues(alpha: 0.7))),
       ],
     );
   }
@@ -311,10 +310,10 @@ class _SearchScreenState extends State<SearchScreen> {
             const SizedBox(height: 16),
             Text("Nothing found for '$_query'",
                 textAlign: TextAlign.center,
-                style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w500, color: cs.onSurface)),
+                style: TextStyle(fontFamily: 'Satoshi', fontSize: 16, fontWeight: FontWeight.w500, color: cs.onSurface)),
             const SizedBox(height: 8),
             Text('Try different keywords',
-                style: GoogleFonts.inter(fontSize: 14, color: cs.onSurfaceVariant)),
+                style: TextStyle(fontFamily: 'Satoshi', fontSize: 14, color: cs.onSurfaceVariant)),
           ],
         ),
       ),
@@ -322,73 +321,51 @@ class _SearchScreenState extends State<SearchScreen> {
   }
 
   Widget _buildResults(ColorScheme cs) {
-    final allResults = <_SearchResultItem>[];
+    final items = <Widget>[];
 
-    for (final note in _noteResults) {
-      allResults.add(_SearchResultItem(type: 'note', data: note));
-    }
-    for (final expense in _expenseResults) {
-      allResults.add(_SearchResultItem(type: 'expense', data: expense));
-    }
-    for (final reminder in _reminderResults) {
-      allResults.add(_SearchResultItem(type: 'reminder', data: reminder));
-    }
-    for (final capture in _captureResults) {
-      allResults.add(_SearchResultItem(type: 'capture', data: capture));
-    }
-
-    return ListView.builder(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
-      itemCount: _noteResults.length + _expenseResults.length +
-          _reminderResults.length + _captureResults.length + 4, // +4 for section headers
-      itemBuilder: (context, i) {
-        int idx = 0;
-
-        if (idx == i) {
-          idx++;
-          return _sectionHeader('NOTES (${_noteResults.length})', cs);
-        }
-        if (i < idx + _noteResults.length) {
-          return Padding(
-            padding: const EdgeInsets.only(bottom: 8),
-            child: _noteResultItem(_noteResults[i - idx], cs),
-          );
-        }
-        idx += _noteResults.length;
-
-        if (idx == i) {
-          idx++;
-          return _sectionHeader('EXPENSES (${_expenseResults.length})', cs);
-        }
-        if (i < idx + _expenseResults.length) {
-          return Padding(
-            padding: const EdgeInsets.only(bottom: 8),
-            child: _expenseResultItem(_expenseResults[i - idx], cs),
-          );
-        }
-        idx += _expenseResults.length;
-
-        if (idx == i) {
-          idx++;
-          return _sectionHeader('REMINDERS (${_reminderResults.length})', cs);
-        }
-        if (i < idx + _reminderResults.length) {
-          return Padding(
-            padding: const EdgeInsets.only(bottom: 8),
-            child: _reminderResultItem(_reminderResults[i - idx], cs),
-          );
-        }
-        idx += _reminderResults.length;
-
-        if (idx == i) {
-          idx++;
-          return _sectionHeader('CAPTURES (${_captureResults.length})', cs);
-        }
-        return Padding(
+    if (_noteResults.isNotEmpty) {
+      items.add(_sectionHeader('NOTES (${_noteResults.length})', cs));
+      for (final note in _noteResults) {
+        items.add(Padding(
           padding: const EdgeInsets.only(bottom: 8),
-          child: _captureResultItem(_captureResults[i - idx], cs),
-        );
-      },
+          child: _noteResultItem(note, cs),
+        ));
+      }
+    }
+
+    if (_expenseResults.isNotEmpty) {
+      items.add(_sectionHeader('EXPENSES (${_expenseResults.length})', cs));
+      for (final expense in _expenseResults) {
+        items.add(Padding(
+          padding: const EdgeInsets.only(bottom: 8),
+          child: _expenseResultItem(expense, cs),
+        ));
+      }
+    }
+
+    if (_reminderResults.isNotEmpty) {
+      items.add(_sectionHeader('REMINDERS (${_reminderResults.length})', cs));
+      for (final reminder in _reminderResults) {
+        items.add(Padding(
+          padding: const EdgeInsets.only(bottom: 8),
+          child: _reminderResultItem(reminder, cs),
+        ));
+      }
+    }
+
+    if (_captureResults.isNotEmpty) {
+      items.add(_sectionHeader('CAPTURES (${_captureResults.length})', cs));
+      for (final capture in _captureResults) {
+        items.add(Padding(
+          padding: const EdgeInsets.only(bottom: 8),
+          child: _captureResultItem(capture, cs),
+        ));
+      }
+    }
+
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
+      children: items,
     );
   }
 
@@ -396,7 +373,7 @@ class _SearchScreenState extends State<SearchScreen> {
     return Padding(
       padding: const EdgeInsets.only(left: 4, top: 16, bottom: 8),
       child: Text(label,
-          style: GoogleFonts.inter(
+          style: TextStyle(fontFamily: 'Satoshi', 
             fontSize: 12, fontWeight: FontWeight.w700, letterSpacing: 1,
             color: cs.onSurfaceVariant.withValues(alpha: 0.7),
           )),
@@ -434,7 +411,7 @@ class _SearchScreenState extends State<SearchScreen> {
                   ],
                   const SizedBox(height: 6),
                   Text(DateFormat('MMM d, yyyy').format(note.updatedAt),
-                      style: GoogleFonts.inter(fontSize: 11, color: cs.onSurfaceVariant.withValues(alpha: 0.6))),
+                      style: TextStyle(fontFamily: 'Satoshi', fontSize: 11, color: cs.onSurfaceVariant.withValues(alpha: 0.6))),
                 ],
               ),
             ),
@@ -476,12 +453,12 @@ class _SearchScreenState extends State<SearchScreen> {
                       expense.description.isNotEmpty ? expense.description : expense.category,
                       _query, cs.onSurface, maxLines: 1),
                   const SizedBox(height: 2),
-                  Text(expense.category, style: GoogleFonts.inter(fontSize: 12, color: cs.onSurfaceVariant)),
+                  Text(expense.category, style: TextStyle(fontFamily: 'Satoshi', fontSize: 12, color: cs.onSurfaceVariant)),
                 ],
               ),
             ),
             Text('\$${expense.amount.toStringAsFixed(2)}',
-                style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w600, color: amountColor)),
+                style: TextStyle(fontFamily: 'Satoshi', fontSize: 16, fontWeight: FontWeight.w600, color: amountColor)),
           ],
         ),
       ),
@@ -541,7 +518,7 @@ class _SearchScreenState extends State<SearchScreen> {
             Column(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
-                Text(timeStr, style: GoogleFonts.inter(fontSize: 13, color: cs.onSurface)),
+                Text(timeStr, style: TextStyle(fontFamily: 'Satoshi', fontSize: 13, color: cs.onSurface)),
                 const SizedBox(height: 4),
                 Container(width: 8, height: 8,
                   decoration: BoxDecoration(color: priorityColor, shape: BoxShape.circle)),
@@ -573,7 +550,7 @@ class _SearchScreenState extends State<SearchScreen> {
                 _buildHighlightedText(capture.content, _query, cs.onSurface, maxLines: 2),
                 const SizedBox(height: 4),
                 Text(DateFormat('MMM d, yyyy').format(capture.capturedAt),
-                    style: GoogleFonts.inter(fontSize: 11, color: cs.onSurfaceVariant.withValues(alpha: 0.6))),
+                    style: TextStyle(fontFamily: 'Satoshi', fontSize: 11, color: cs.onSurfaceVariant.withValues(alpha: 0.6))),
               ],
             ),
           ),
@@ -602,10 +579,4 @@ class _SearchScreenState extends State<SearchScreen> {
       default: return Icons.circle_rounded;
     }
   }
-}
-
-class _SearchResultItem {
-  final String type;
-  final dynamic data;
-  const _SearchResultItem({required this.type, required this.data});
 }

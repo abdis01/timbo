@@ -1,21 +1,26 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 import '../../config/theme.dart';
 import '../../config/constants.dart';
+import '../../config/routes.dart';
 import '../../models/chat_message.dart';
 import '../../services/gemini_service.dart';
 import '../../services/premium_service.dart';
+import '../../services/firebase_service.dart';
+import '../../services/hive_service.dart';
 import '../../providers/user_provider.dart';
 import '../../widgets/premium_upgrade_sheet.dart';
+import '../../widgets/retry_widget.dart';
 
 class _AnimatedMessage {
   final ChatMessage message;
-  final AnimationController controller;
-  _AnimatedMessage(this.message, this.controller);
+  final AnimationController? controller;
+  final bool isWelcome;
+  _AnimatedMessage(this.message, this.controller, {this.isWelcome = false});
 }
 
 class ChatScreen extends StatefulWidget {
@@ -31,8 +36,10 @@ class _ChatScreenState extends State<ChatScreen>
   final _textController = TextEditingController();
   final _scrollController = ScrollController();
   final _focusNode = FocusNode();
+  final _speech = stt.SpeechToText();
   bool _isLoading = false;
   bool _initialized = false;
+  bool _hasError = false;
   Timer? _limitTimer;
 
   @override
@@ -42,19 +49,31 @@ class _ChatScreenState extends State<ChatScreen>
   }
 
   Future<void> _initChat() async {
-    await GeminiService.instance.initialize();
+    try {
+      await GeminiService.instance.initialize();
+    } catch (_) {
+      if (mounted) setState(() => _hasError = true);
+      return;
+    }
     if (!mounted) return;
     final user = context.read<UserProvider>().user;
     final name = user?.name ?? 'Friend';
+
+    final history = HiveService.instance.getChatHistory();
     setState(() {
+      for (final msg in history) {
+        _messages.add(_AnimatedMessage(msg, null));
+      }
+      final welcomeCtrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 400));
       _messages.add(_AnimatedMessage(
         ChatMessage(
           content: GeminiService.instance.getWelcomeMessage(name),
           isUser: false,
         ),
-        AnimationController(vsync: this, duration: const Duration(milliseconds: 400)),
+        welcomeCtrl,
+        isWelcome: true,
       ));
-      _messages.last.controller.forward();
+      _messages.last.controller?.forward();
       _initialized = true;
     });
   }
@@ -62,7 +81,7 @@ class _ChatScreenState extends State<ChatScreen>
   @override
   void dispose() {
     for (final m in _messages) {
-      m.controller.dispose();
+      m.controller?.dispose();
     }
     _textController.dispose();
     _scrollController.dispose();
@@ -84,66 +103,58 @@ class _ChatScreenState extends State<ChatScreen>
   }
 
   Future<void> _sendMessage(String text) async {
+    HapticFeedback.lightImpact();
     final msg = text.trim();
     if (msg.isEmpty) return;
 
     if (PremiumService.instance.isAIExhausted()) {
-      _showUpgradeSheet();
-      return;
-    }
-
-    final bool isPremium = context.read<UserProvider>().isPremium;
-
-    if (!isPremium) {
-      final remaining = PremiumService.instance.getRemainingInteractions();
-      String limitMsg;
-      if (remaining <= 0) {
-        limitMsg = 'You\'ve used all your free AI conversations today. Upgrade to Premium for unlimited access!';
-      } else {
-        limitMsg = '$remaining of ${AppConstants.freeAiDailyLimit} conversations remaining today';
-      }
+      final exhaustedMsg = PremiumService.instance.isPremium()
+          ? 'Daily limit reached. Come back tomorrow!'
+          : 'Daily limit reached. Upgrade to Premium for \$${AppConstants.premiumPrice.toStringAsFixed(2)}/month!';
       setState(() {
         _messages.add(_AnimatedMessage(
-          ChatMessage(content: limitMsg, isUser: false),
+          ChatMessage(content: exhaustedMsg, isUser: false),
           AnimationController(vsync: this, duration: const Duration(milliseconds: 400)),
         ));
-        _messages.last.controller.forward();
-        _isLoading = false;
+        _messages.last.controller?.forward();
       });
       _scrollToBottom();
       return;
     }
 
+    final userMsg = ChatMessage(content: msg, isUser: true);
+    await HiveService.instance.saveChatMessage(userMsg);
+
     setState(() {
       _messages.add(_AnimatedMessage(
-        ChatMessage(content: msg, isUser: true),
+        userMsg,
         AnimationController(vsync: this, duration: const Duration(milliseconds: 400)),
       ));
-      _messages.last.controller.forward();
+      _messages.last.controller?.forward();
       _isLoading = true;
     });
     _textController.clear();
     _scrollToBottom();
 
-    try {
-      await PremiumService.instance.useInteraction();
-    } catch (_) {}
-
     String reply;
     try {
       reply = await GeminiService.instance
-          .sendMessage(msg, _messages.map((m) => m.message).toList());
+          .sendMessage(msg, _messages.where((m) => !m.isWelcome).map((m) => m.message).toList());
+      await PremiumService.instance.useInteraction();
     } catch (_) {
       reply = 'Timbo is thinking... try again in a moment.';
     }
 
     if (!mounted) return;
+    final aiMsg = ChatMessage(content: reply, isUser: false);
+    await HiveService.instance.saveChatMessage(aiMsg);
+
     setState(() {
       _messages.add(_AnimatedMessage(
-        ChatMessage(content: reply, isUser: false),
+        aiMsg,
         AnimationController(vsync: this, duration: const Duration(milliseconds: 400)),
       ));
-      _messages.last.controller.forward();
+      _messages.last.controller?.forward();
       _isLoading = false;
     });
     _scrollToBottom();
@@ -170,9 +181,9 @@ class _ChatScreenState extends State<ChatScreen>
                 color: cs.primary,
                 borderRadius: BorderRadius.circular(10),
               ),
-              child: Center(
+              child: const Center(
                 child: Text('T',
-                    style: GoogleFonts.sora(
+                    style: TextStyle(fontFamily: 'Satoshi', 
                         fontSize: 18,
                         fontWeight: FontWeight.w700,
                         color: Colors.white)),
@@ -183,12 +194,12 @@ class _ChatScreenState extends State<ChatScreen>
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text('Timbo',
-                    style: GoogleFonts.sora(
+                    style: TextStyle(fontFamily: 'Satoshi', 
                         fontSize: 16,
                         fontWeight: FontWeight.w600,
                         color: cs.onSurface)),
                 Text('Your AI Secretary',
-                    style: GoogleFonts.inter(
+                    style: TextStyle(fontFamily: 'Satoshi', 
                         fontSize: 11, color: cs.onSurfaceVariant)),
               ],
             ),
@@ -197,73 +208,8 @@ class _ChatScreenState extends State<ChatScreen>
       ),
       body: Column(
         children: [
-          _buildLimitIndicator(cs.onSurfaceVariant),
           Expanded(child: _buildMessageList(cs.onSurface, cs.onSurfaceVariant, cs.primary)),
           _buildInputBar(cs.onSurface, cs.onSurfaceVariant, cs.primary),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildLimitIndicator(Color textSecondary) {
-    final remaining = PremiumService.instance.getRemainingInteractions();
-    final user = context.watch<UserProvider>();
-    final isPremium = user.isPremium;
-
-    if (isPremium) return const SizedBox.shrink();
-
-    if (remaining > 0) {
-      return Container(
-        width: double.infinity,
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-        color: context.cardColor,
-        child: Text(
-          '$remaining of ${AppConstants.freeAiDailyLimit} conversations remaining today',
-          textAlign: TextAlign.center,
-          style: GoogleFonts.inter(fontSize: 12, color: textSecondary),
-        ),
-      );
-    }
-
-    _limitTimer ??= Timer.periodic(const Duration(seconds: 60), (_) {
-      if (mounted) setState(() {});
-    });
-
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-      color: context.warningColor.withValues(alpha: 0.15),
-      child: Row(
-        children: [
-          Expanded(
-            child: Text(
-              'Daily limit reached. Resets in ${PremiumService.instance.getFormattedTimeUntilMidnight()}.',
-              style: GoogleFonts.inter(
-                fontSize: 12,
-                color: context.warningColor,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ),
-          const SizedBox(width: 8),
-          GestureDetector(
-            onTap: _showUpgradeSheet,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-              decoration: BoxDecoration(
-                color: context.warningColor,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Text(
-                'Upgrade',
-                style: GoogleFonts.inter(
-                  fontSize: 11,
-                  color: Colors.white,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-          ),
         ],
       ),
     );
@@ -275,6 +221,18 @@ class _ChatScreenState extends State<ChatScreen>
     Color primary,
   ) {
     if (!_initialized) {
+      if (_hasError && _messages.isEmpty) {
+        return RetryWidget(
+          message: 'Timbo is thinking... try again in a moment.',
+          onRetry: () {
+            setState(() {
+              _hasError = false;
+              _initialized = false;
+            });
+            _initChat();
+          },
+        );
+      }
       return Center(
         child: CircularProgressIndicator(color: primary),
       );
@@ -290,19 +248,38 @@ class _ChatScreenState extends State<ChatScreen>
         }
 
         final animated = _messages[i];
-        return AnimatedBuilder(
-          animation: animated.controller,
-          builder: (context, child) {
-            final t = animated.controller.value;
-            return Opacity(
-              opacity: t,
-              child: Transform.translate(
-                offset: Offset(0, 20.0 * (1.0 - Curves.easeOutCubic.transform(t))),
-                child: child,
-              ),
+        final ctrl = animated.controller;
+        final bubble = ctrl == null
+            ? _buildBubble(animated.message, textPrimary, textSecondary, primary)
+            : AnimatedBuilder(
+                animation: ctrl,
+                builder: (context, child) {
+                  final t = ctrl.value;
+                  return Opacity(
+                    opacity: t,
+                    child: Transform.translate(
+                      offset: Offset(0, 20.0 * (1.0 - Curves.easeOutCubic.transform(t))),
+                      child: child,
+                    ),
+                  );
+                },
+                child: _buildBubble(animated.message, textPrimary, textSecondary, primary),
+              );
+        return AnimatedSwitcher(
+          duration: const Duration(milliseconds: 300),
+          transitionBuilder: (child, animation) {
+            return SlideTransition(
+              position: Tween<Offset>(
+                begin: const Offset(0, 0.15),
+                end: Offset.zero,
+              ).animate(CurvedAnimation(parent: animation, curve: Curves.easeOut)),
+              child: FadeTransition(opacity: animation, child: child),
             );
           },
-          child: _buildBubble(animated.message, textPrimary, textSecondary, primary),
+          child: Container(
+            key: ValueKey('msg_${i}_${animated.message.hashCode}'),
+            child: bubble,
+          ),
         );
       },
     );
@@ -330,9 +307,9 @@ class _ChatScreenState extends State<ChatScreen>
                 color: primary,
                 borderRadius: BorderRadius.circular(8),
               ),
-              child: Center(
+              child: const Center(
                 child: Text('T',
-                    style: GoogleFonts.sora(
+                    style: TextStyle(fontFamily: 'Satoshi', 
                         fontSize: 14,
                         fontWeight: FontWeight.w700,
                         color: Colors.white)),
@@ -358,7 +335,7 @@ class _ChatScreenState extends State<ChatScreen>
               ),
               child: Text(
                 msg.content,
-                style: GoogleFonts.inter(
+                style: TextStyle(fontFamily: 'Satoshi', 
                   fontSize: 14,
                   height: 1.4,
                   color: msg.isUser ? Colors.white : textPrimary,
@@ -386,15 +363,15 @@ class _ChatScreenState extends State<ChatScreen>
               color: context.primaryColor,
               borderRadius: BorderRadius.circular(8),
             ),
-            child: Center(
-              child: Text('T',
-                  style: GoogleFonts.sora(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w700,
-                      color: Colors.white)),
+            child: const Center(
+                child: Text('T',
+                    style: TextStyle(fontFamily: 'Satoshi', 
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.white)),
+              ),
             ),
-          ),
-          _AnimatedTypingDots(),
+            const _AnimatedTypingDots(),
         ],
       ),
     );
@@ -405,7 +382,7 @@ class _ChatScreenState extends State<ChatScreen>
     Color textSecondary,
     Color primary,
   ) {
-    if (PremiumService.instance.isAIExhausted()) {
+    if (!FirebaseService.instance.isLoggedIn) {
       return Container(
         padding: const EdgeInsets.fromLTRB(12, 8, 12, 16),
         decoration: BoxDecoration(
@@ -417,28 +394,48 @@ class _ChatScreenState extends State<ChatScreen>
             const SizedBox(width: 8),
             Expanded(
               child: Text(
-                'You\'ve used all 5 conversations.',
-                style: GoogleFonts.inter(fontSize: 13, color: textSecondary),
+                'Sign in to chat with Timbo AI',
+                style: TextStyle(fontFamily: 'Satoshi', fontSize: 13, color: textSecondary),
               ),
             ),
-            GestureDetector(
-              onTap: _showUpgradeSheet,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                decoration: BoxDecoration(
-                  color: primary,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(
-                  'Upgrade',
-                  style: GoogleFonts.inter(
-                    fontSize: 12,
-                    color: Colors.white,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
+            TextButton(
+              onPressed: () {
+                Navigator.pop(context);
+                Navigator.pushNamed(context, AppRoutes.login);
+              },
+              child: Text('Sign In',
+                  style: TextStyle(fontFamily: 'Satoshi', fontSize: 13, color: primary)),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (PremiumService.instance.isAIExhausted()) {
+      final exhaustedMsg = PremiumService.instance.isPremium()
+          ? 'Daily limit reached. Come back tomorrow!'
+          : 'Daily limit reached. Get Timbo Premium for \$${AppConstants.premiumPrice.toStringAsFixed(2)}/month!';
+      return Container(
+        padding: const EdgeInsets.fromLTRB(12, 8, 12, 16),
+        decoration: BoxDecoration(
+          color: context.surfaceColor,
+        ),
+        child: Row(
+          children: [
+            Icon(Icons.block_rounded, size: 18, color: textSecondary),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                exhaustedMsg,
+                style: TextStyle(fontFamily: 'Satoshi', fontSize: 13, color: textSecondary),
               ),
             ),
+            if (!PremiumService.instance.isPremium())
+              TextButton(
+                onPressed: _showUpgradeSheet,
+                child: Text('Upgrade',
+                    style: TextStyle(fontFamily: 'Satoshi', fontSize: 13, color: primary)),
+              ),
           ],
         ),
       );
@@ -477,11 +474,11 @@ class _ChatScreenState extends State<ChatScreen>
             child: TextField(
               controller: _textController,
               focusNode: _focusNode,
-              style: GoogleFonts.inter(
+              style: TextStyle(fontFamily: 'Satoshi', 
                   fontSize: 15, color: textPrimary),
               decoration: InputDecoration(
                 hintText: 'Ask Timbo anything...',
-                hintStyle: GoogleFonts.inter(
+                hintStyle: TextStyle(fontFamily: 'Satoshi', 
                     color: textSecondary.withValues(alpha: 0.5)),
                 border: InputBorder.none,
                 enabledBorder: InputBorder.none,
@@ -505,7 +502,7 @@ class _ChatScreenState extends State<ChatScreen>
                 color: primary,
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: Icon(Icons.arrow_upward_rounded,
+              child: const Icon(Icons.arrow_upward_rounded,
                   size: 20, color: Colors.white),
             ),
           ),
@@ -531,11 +528,19 @@ class _ChatScreenState extends State<ChatScreen>
   }
 
   void _startVoiceInput() async {
-    final speech = stt.SpeechToText();
-    final available = await speech.initialize();
-    if (!available) return;
+    if (kIsWeb) {
+      return;
+    }
+    if (defaultTargetPlatform != TargetPlatform.android &&
+        defaultTargetPlatform != TargetPlatform.iOS) {
+      return;
+    }
+    final available = await _speech.initialize();
+    if (!available) {
+      return;
+    }
 
-    await speech.listen(
+    await _speech.listen(
       onResult: (result) {
         _textController.text = result.recognizedWords;
       },

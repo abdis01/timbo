@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import '../config/theme.dart';
 import '../models/reminder_model.dart';
@@ -46,7 +45,7 @@ class ReminderCard extends StatelessWidget {
           color: context.dangerColor,
           borderRadius: BorderRadius.circular(AppRadius.sm),
         ),
-        child: Icon(Icons.delete_outline_rounded,
+        child: const Icon(Icons.delete_outline_rounded,
             color: Colors.white, size: 24),
       ),
       onDismissed: (_) => onDelete?.call(),
@@ -77,7 +76,7 @@ class ReminderCard extends StatelessWidget {
                       : Colors.transparent,
                 ),
                 child: reminder.isCompleted
-                    ? Icon(Icons.check_rounded,
+                    ? const Icon(Icons.check_rounded,
                         size: 14, color: Colors.white)
                     : null,
               ),
@@ -98,7 +97,7 @@ class ReminderCard extends StatelessWidget {
                 children: [
                   Text(
                     reminder.title,
-                    style: GoogleFonts.inter(
+                    style: TextStyle(fontFamily: 'Satoshi', 
                       fontSize: 14,
                       fontWeight: FontWeight.w600,
                       color: reminder.isCompleted
@@ -116,7 +115,7 @@ class ReminderCard extends StatelessWidget {
                     children: [
                       Text(
                         DateFormat('h:mm a').format(reminder.scheduledAt),
-                        style: GoogleFonts.inter(
+                        style: TextStyle(fontFamily: 'Satoshi', 
                             fontSize: 12, color: textSecondary),
                       ),
                       if (reminder.isRecurring) ...[
