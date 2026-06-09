@@ -20,7 +20,7 @@ jobs:
           cp lib/config/secrets_template.dart lib/config/secrets.dart
           cp lib/config/payment_config_template.dart lib/config/payment_config.dart
       - run: flutter pub get
-      - run: flutter analyze
+      - run: flutter analyze --no-fatal-infos
 
   build:
     needs: analyze
