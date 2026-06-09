@@ -10,7 +10,6 @@ list(APPEND FLUTTER_PLUGIN_LIST
   firebase_auth
   firebase_core
   firebase_remote_config
-  flutter_inappwebview_windows
   permission_handler_windows
   record_windows
   rive_native

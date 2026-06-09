@@ -13,7 +13,7 @@ import '../../services/premium_service.dart';
 import '../../services/firebase_service.dart';
 import '../../services/hive_service.dart';
 import '../../providers/user_provider.dart';
-import '../../widgets/premium_upgrade_sheet.dart';
+import '../../widgets/subscription_utils.dart';
 import '../../widgets/retry_widget.dart';
 
 class _AnimatedMessage {
@@ -110,7 +110,7 @@ class _ChatScreenState extends State<ChatScreen>
     if (PremiumService.instance.isAIExhausted()) {
       final exhaustedMsg = PremiumService.instance.isPremium()
           ? 'Daily limit reached. Come back tomorrow!'
-          : 'Daily limit reached. Upgrade to Premium for \$${AppConstants.premiumPrice.toStringAsFixed(2)}/month!';
+          : 'Daily limit reached. Upgrade to Premium for TZS ${AppConstants.premiumPrice.toStringAsFixed(0)}/month!';
       setState(() {
         _messages.add(_AnimatedMessage(
           ChatMessage(content: exhaustedMsg, isUser: false),
@@ -414,7 +414,7 @@ class _ChatScreenState extends State<ChatScreen>
     if (PremiumService.instance.isAIExhausted()) {
       final exhaustedMsg = PremiumService.instance.isPremium()
           ? 'Daily limit reached. Come back tomorrow!'
-          : 'Daily limit reached. Get Timbo Premium for \$${AppConstants.premiumPrice.toStringAsFixed(2)}/month!';
+          : 'Daily limit reached. Get Timbo Premium for TZS ${AppConstants.premiumPrice.toStringAsFixed(0)}/month!';
       return Container(
         padding: const EdgeInsets.fromLTRB(12, 8, 12, 16),
         decoration: BoxDecoration(
@@ -512,19 +512,7 @@ class _ChatScreenState extends State<ChatScreen>
   }
 
   void _showUpgradeSheet() {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) => PremiumUpgradeSheet(
-        onJoinWaitlist: () {
-          Navigator.pop(context);
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('You\'re on the waitlist! We\'ll notify you.')),
-          );
-        },
-      ),
-    );
+    showUpgradeSheet(context);
   }
 
   void _startVoiceInput() async {

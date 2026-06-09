@@ -1,8 +1,12 @@
-// Timbo Gemini API Proxy + Payment Verification — Cloudflare Worker
+// Timbo Gemini API Proxy + AzamPay Payment — Cloudflare Worker
 
 const GEMINI_MODEL = 'gemini-2.0-flash';
 const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}`;
-const FLW_BASE = 'https://api.flutterwave.com/v3';
+
+const AZAMPAY_AUTH_SANDBOX = 'https://authenticator-sandbox.azampay.co.tz/AppAuth';
+const AZAMPAY_AUTH_PROD = 'https://authenticator.azampay.co.tz/AppAuth';
+const AZAMPAY_CHECKOUT_SANDBOX = 'https://sandbox.azampay.co.tz/api/v1/Checkout/MNO';
+const AZAMPAY_CHECKOUT_PROD = 'https://api.azampay.co.tz/api/v1/Checkout/MNO';
 
 const RATE_LIMIT = 30;
 const RATE_WINDOW_MS = 60_000;
@@ -20,6 +24,49 @@ function jsonResponse(data, status = 200) {
   });
 }
 
+function errorResponse(message, status) {
+  return jsonResponse({ error: message }, status);
+}
+
+// Authenticate with AzamPay and get an access token
+async function azampayAuth(appName, clientId, clientSecret, isSandbox) {
+  const url = isSandbox ? AZAMPAY_AUTH_SANDBOX : AZAMPAY_AUTH_PROD;
+  const resp = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      appName,
+      clientId,
+      clientSecret,
+    }),
+  });
+  if (!resp.ok) return null;
+  const data = await resp.json();
+  return data.data?.accessToken || data.accessToken || null;
+}
+
+// Initiate MNO (mobile money) checkout — sends USSD push to phone
+async function azampayMnoCheckout(accessToken, payload, isSandbox) {
+  const url = isSandbox ? AZAMPAY_CHECKOUT_SANDBOX : AZAMPAY_CHECKOUT_PROD;
+  const resp = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      accountNumber: payload.phone_number,
+      amount: payload.amount,
+      currency: payload.currency || 'TZS',
+      externalId: payload.external_id,
+      provider: payload.provider,
+      additionalProperties: {},
+    }),
+  });
+  const data = await resp.json();
+  return { ok: resp.ok, data };
+}
+
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
@@ -32,66 +79,102 @@ export default {
       return jsonResponse({ status: 'ok' });
     }
 
-    // --- Verify a Flutterwave transaction ---
-    if (url.pathname === '/verify-payment' && request.method === 'POST') {
+    // --- AzamPay checkout (initiates USSD push) ---
+    if (url.pathname === '/azampay-checkout' && request.method === 'POST') {
       try {
         const body = await request.json();
-        const { tx_ref } = body;
-        if (!tx_ref) return jsonResponse({ error: 'Missing tx_ref' }, 400);
+        const { phone_number, amount, currency, provider, external_id, app_name, client_id, client_secret } = body;
 
-        const flwSecretKey = env.FLW_SECRET_KEY;
-        if (!flwSecretKey) {
-          return jsonResponse({ error: 'Payment not configured' }, 500);
+        if (!phone_number || !amount || !provider || !external_id) {
+          return errorResponse('Missing required fields', 400);
         }
 
-        const verifyUrl = `${FLW_BASE}/transactions/verify_by_reference?tx_ref=${tx_ref}`;
-        const resp = await fetch(verifyUrl, {
-          headers: { Authorization: `Bearer ${flwSecretKey}` },
-        });
-        const result = await resp.json();
+        // Check if using sandbox (based on client_secret pattern or env flag)
+        const isSandbox = env.AZAMPAY_SANDBOX !== 'false';
 
-        if (!resp.ok || result.status !== 'success') {
-          return jsonResponse({ verified: false, error: 'Transaction not found or failed' });
+        // Authenticate with AzamPay
+        const token = await azampayAuth(app_name, client_id, client_secret, isSandbox);
+        if (!token) {
+          return errorResponse('Authentication failed', 502);
         }
 
-        const data = result.data;
-        const expectedAmount = parseInt(env.EXPECTED_PRICE || '5000', 10);
-        const paidAmount = parseInt(data.amount, 10);
+        // Initiate checkout
+        const result = await azampayMnoCheckout(token, { phone_number, amount, currency, provider, external_id }, isSandbox);
 
-        if (paidAmount < expectedAmount) {
-          return jsonResponse({ verified: false, error: 'Amount mismatch' });
+        if (!result.ok) {
+          return jsonResponse({
+            success: false,
+            error: result.data?.message || 'Checkout failed',
+            details: result.data,
+          });
         }
 
         return jsonResponse({
-          verified: true,
-          tx_ref: data.tx_ref,
-          amount: data.amount,
-          currency: data.currency,
-          charged_amount: data.charged_amount,
+          success: true,
+          external_id,
+          transaction_id: result.data?.data?.transactionId || null,
+          message: 'USSD push sent. Check your phone.',
         });
       } catch (err) {
-        return jsonResponse({ error: err.message }, 500);
+        return errorResponse(err.message, 500);
       }
     }
 
-    // --- Payment callback (user lands here after payment) ---
+    // --- AzamPay verify payment status ---
+    if (url.pathname === '/azampay-verify' && request.method === 'GET') {
+      try {
+        const externalId = url.searchParams.get('external_id');
+        if (!externalId) return errorResponse('Missing external_id', 400);
+
+        // For sandbox testing, we simulate verification
+        // In production, this would call AzamPay's transaction status API
+        // AzamPay sends callbacks to /azampay-callback which stores results in KV
+
+        const verified = await env.PAYMENTS?.get(externalId);
+        return jsonResponse({
+          verified: verified === 'confirmed',
+          external_id: externalId,
+        });
+      } catch (err) {
+        return errorResponse(err.message, 500);
+      }
+    }
+
+    // --- AzamPay callback (webhook from AzamPay after payment) ---
+    if (url.pathname === '/azampay-callback') {
+      try {
+        const body = request.method === 'POST' ? await request.json() : {};
+        const externalId = body.externalId || body.external_id || url.searchParams.get('external_id');
+        const status = body.status || body.transactionStatus || 'completed';
+
+        if (externalId && (status === 'success' || status === 'completed')) {
+          // Store in KV for verification
+          try {
+            await env.PAYMENTS?.put(externalId, 'confirmed', { expirationTtl: 86400 });
+          } catch (_) {}
+        }
+
+        return jsonResponse({ received: true });
+      } catch (err) {
+        return errorResponse(err.message, 500);
+      }
+    }
+
+    // --- Payment callback (user sees after redirect — kept for backward compat) ---
     if (url.pathname === '/payment-callback' && request.method === 'GET') {
-      const txRef = url.searchParams.get('tx_ref');
-      const status = url.searchParams.get('status');
       return jsonResponse({
-        status: status || 'completed',
-        tx_ref: txRef,
+        status: 'completed',
         message: 'Payment processed. You can close this tab.',
       });
     }
 
-    // --- Gemini proxy (existing) ---
+    // --- Gemini proxy endpoints ---
     if (request.method !== 'POST') {
-      return jsonResponse({ error: 'Method not allowed' }, 405);
+      return errorResponse('Method not allowed', 405);
     }
 
     const apiKey = env.GEMINI_API_KEY;
-    if (!apiKey) return jsonResponse({ error: 'Server misconfigured' }, 500);
+    if (!apiKey) return errorResponse('Server misconfigured', 500);
 
     // Rate limiting
     const ip = request.headers.get('CF-Connecting-IP') || 'unknown';
@@ -100,7 +183,7 @@ export default {
     const rlRaw = await env.RATE_LIMIT?.get(rateKey);
     const rl = rlRaw ? JSON.parse(rlRaw) : null;
     if (rl && now - rl.resetAt < RATE_WINDOW_MS && rl.count >= RATE_LIMIT) {
-      return jsonResponse({ error: 'Rate limit exceeded' }, 429);
+      return errorResponse('Rate limit exceeded', 429);
     }
     const newRl = rl && now - rl.resetAt < RATE_WINDOW_MS
       ? { count: rl.count + 1, resetAt: rl.resetAt }
@@ -112,7 +195,7 @@ export default {
       const { prompt, history, systemPrompt } = body;
 
       if (!prompt || typeof prompt !== 'string') {
-        return jsonResponse({ error: 'Missing "prompt"' }, 400);
+        return errorResponse('Missing "prompt"', 400);
       }
 
       const contents = [];
@@ -144,14 +227,14 @@ export default {
 
       if (!response.ok) {
         console.error('Gemini API error:', response.status, JSON.stringify(data));
-        return jsonResponse({ error: 'AI service unavailable' }, 502);
+        return errorResponse('AI service unavailable', 502);
       }
 
       const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
       return jsonResponse({ [isChat ? 'reply' : 'text']: text });
     } catch (err) {
       console.error('Worker error:', err.message);
-      return jsonResponse({ error: 'Internal error' }, 500);
+      return errorResponse('Internal error', 500);
     }
   },
 };

@@ -10,13 +10,26 @@ class PremiumUpgradeData {
   const PremiumUpgradeData(this.icon, this.title, this.subtitle);
 }
 
-class PremiumUpgradeSheet extends StatelessWidget {
-  final VoidCallback onSubscribe;
+class PremiumUpgradeSheet extends StatefulWidget {
+  final void Function(String phone, String provider) onSubscribe;
+  const PremiumUpgradeSheet({super.key, required this.onSubscribe});
 
-  const PremiumUpgradeSheet({
-    super.key,
-    required this.onSubscribe,
-  });
+  @override
+  State<PremiumUpgradeSheet> createState() => _PremiumUpgradeSheetState();
+}
+
+class _PremiumUpgradeSheetState extends State<PremiumUpgradeSheet> {
+  final _phoneController = TextEditingController();
+  String _selectedProvider = 'Mpesa';
+  bool _loading = false;
+
+  final _providers = ['Mpesa', 'Tigo', 'Airtel'];
+
+  @override
+  void dispose() {
+    _phoneController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -33,21 +46,8 @@ class PremiumUpgradeSheet extends StatelessWidget {
       _ComparisonData('Spending Analysis', '\u2717', '\u2713'),
     ];
 
-    final features = [
-      const PremiumUpgradeData(Icons.psychology_rounded, 'Unlimited AI Conversations',
-          'Chat with Timbo as much as you want'),
-      const PremiumUpgradeData(Icons.insights_rounded, 'Advanced Finance Insights',
-          'Detailed spending analysis and trends'),
-      const PremiumUpgradeData(Icons.cloud_rounded, 'Cloud Backup & Sync',
-          'Your data safe across all devices'),
-      const PremiumUpgradeData(Icons.psychology_rounded, 'Priority Insights',
-          'Auto-refreshed daily with smart suggestions'),
-      const PremiumUpgradeData(Icons.bolt_rounded, 'Unlimited Quick Captures',
-          'Capture anything, anytime, no limits'),
-    ];
-
     return Container(
-      height: MediaQuery.of(context).size.height * 0.8,
+      height: MediaQuery.of(context).size.height * 0.85,
       decoration: BoxDecoration(
         color: cs.surface,
         borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
@@ -64,12 +64,11 @@ class PremiumUpgradeSheet extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 24),
-          Icon(Icons.workspace_premium_rounded,
-              size: 48, color: gold),
+          Icon(Icons.workspace_premium_rounded, size: 48, color: gold),
           const SizedBox(height: 12),
           Text(
             'Timbo Premium',
-            style: TextStyle(fontFamily: 'Satoshi', 
+            style: TextStyle(fontFamily: 'Satoshi',
               fontSize: 24,
               fontWeight: FontWeight.w700,
               color: textPrimary,
@@ -83,7 +82,7 @@ class PremiumUpgradeSheet extends StatelessWidget {
           const SizedBox(height: 4),
           Text(
             'TZS ${AppConstants.premiumPrice.toStringAsFixed(0)}/month',
-            style: TextStyle(fontFamily: 'Satoshi', 
+            style: TextStyle(fontFamily: 'Satoshi',
               fontSize: 24,
               fontWeight: FontWeight.w700,
               color: gold,
@@ -91,42 +90,61 @@ class PremiumUpgradeSheet extends StatelessWidget {
           ),
           const SizedBox(height: 20),
           _ComparisonTable(comparisons: comparisons, gold: gold, cs: cs),
-          const SizedBox(height: 16),
-          Expanded(
-            child: ListView.separated(
-              padding: const EdgeInsets.symmetric(horizontal: 24),
-              itemCount: features.length,
-              separatorBuilder: (_, __) => const SizedBox(height: 12),
-              itemBuilder: (_, i) {
-                final f = features[i];
-                return Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Icon(Icons.check_circle_rounded,
-                        size: 20, color: context.successColor),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(f.title,
-                              style: TextStyle(fontFamily: 'Satoshi', 
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w500,
-                                  color: textPrimary)),
-                          Text(f.subtitle,
-                              style: TextStyle(fontFamily: 'Satoshi', 
-                                  fontSize: 12, color: textSecondary)),
-                        ],
-                      ),
-                    ),
-                  ],
-                );
-              },
+          const SizedBox(height: 20),
+          // Phone number input
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24),
+            child: TextField(
+              controller: _phoneController,
+              keyboardType: TextInputType.phone,
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+              decoration: InputDecoration(
+                labelText: 'Phone Number',
+                hintText: '255712345678',
+                prefixIcon: const Icon(Icons.phone_android_rounded),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                filled: true,
+                fillColor: cs.surfaceContainerHighest.withValues(alpha: 0.3),
+              ),
+              style: TextStyle(fontFamily: 'Satoshi', color: textPrimary),
             ),
           ),
+          const SizedBox(height: 12),
+          // Provider selector
           Padding(
-            padding: const EdgeInsets.fromLTRB(24, 8, 24, 4),
+            padding: const EdgeInsets.symmetric(horizontal: 24),
+            child: DropdownButtonFormField<String>(
+              initialValue: _selectedProvider,
+              decoration: InputDecoration(
+                labelText: 'Mobile Money Provider',
+                prefixIcon: const Icon(Icons.mobile_friendly_rounded),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                filled: true,
+                fillColor: cs.surfaceContainerHighest.withValues(alpha: 0.3),
+              ),
+              items: _providers.map((p) => DropdownMenuItem(
+                value: p,
+                child: Text(p),
+              )).toList(),
+              onChanged: (v) {
+                if (v != null) setState(() => _selectedProvider = v);
+              },
+              style: TextStyle(fontFamily: 'Satoshi', color: textPrimary),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'You\'ll receive a USSD prompt on your phone.\nEnter your PIN to confirm payment.',
+            textAlign: TextAlign.center,
+            style: TextStyle(fontFamily: 'Satoshi', fontSize: 11, color: Colors.grey),
+          ),
+          const SizedBox(height: 16),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24),
             child: SizedBox(
               width: double.infinity,
               height: 48,
@@ -138,10 +156,7 @@ class PremiumUpgradeSheet extends StatelessWidget {
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: ElevatedButton(
-                  onPressed: () {
-                    HapticFeedback.mediumImpact();
-                    onSubscribe();
-                  },
+                  onPressed: _loading ? null : _handleSubscribe,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.transparent,
                     foregroundColor: Colors.white,
@@ -150,36 +165,48 @@ class PremiumUpgradeSheet extends StatelessWidget {
                       borderRadius: BorderRadius.circular(12),
                     ),
                   ),
-                    child: Text(
-                      'Subscribe — TZS ${AppConstants.premiumPrice.toStringAsFixed(0)}/mo',
-                      style: TextStyle(fontFamily: 'Satoshi', 
-                          fontSize: 15, fontWeight: FontWeight.w600),
-                    ),
+                  child: _loading
+                      ? const SizedBox(
+                          width: 22,
+                          height: 22,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : Text(
+                          'Pay TZS ${AppConstants.premiumPrice.toStringAsFixed(0)} via $_selectedProvider',
+                          style: TextStyle(fontFamily: 'Satoshi',
+                              fontSize: 14, fontWeight: FontWeight.w600),
+                        ),
                 ),
               ),
             ),
           ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(24, 0, 24, 4),
-            child: Text(
-              'Pay with Card, Mobile Money (M-Pesa, TigoPesa) or Bank Transfer',
-              textAlign: TextAlign.center,
-              style: TextStyle(fontFamily: 'Satoshi', 
-                  fontSize: 11, color: Colors.grey),
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.only(bottom: 24),
-            child: TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: Text('Maybe Later',
-                  style: TextStyle(fontFamily: 'Satoshi', 
-                      fontSize: 13, color: textSecondary)),
-            ),
+          const SizedBox(height: 12),
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text('Maybe Later',
+                style: TextStyle(fontFamily: 'Satoshi',
+                    fontSize: 13, color: textSecondary)),
           ),
         ],
       ),
     );
+  }
+
+  void _handleSubscribe() {
+    final phone = _phoneController.text.trim();
+    if (phone.isEmpty || phone.length < 9) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please enter a valid phone number')),
+      );
+      return;
+    }
+    final fullPhone = phone.startsWith('255') ? phone : '255$phone';
+    HapticFeedback.mediumImpact();
+    setState(() => _loading = true);
+    widget.onSubscribe(fullPhone, _selectedProvider);
   }
 }
 
@@ -235,7 +262,7 @@ class _ComparisonTable extends StatelessWidget {
                     flex: 1,
                     child: Text('You',
                         textAlign: TextAlign.center,
-                        style: TextStyle(fontFamily: 'Satoshi', 
+                        style: TextStyle(fontFamily: 'Satoshi',
                             fontSize: 12,
                             fontWeight: FontWeight.w600,
                             color: Colors.grey)),
@@ -252,14 +279,14 @@ class _ComparisonTable extends StatelessWidget {
                             borderRadius: BorderRadius.circular(4),
                           ),
                           child: const Text('Premium',
-                              style: TextStyle(fontFamily: 'Satoshi', 
+                              style: TextStyle(fontFamily: 'Satoshi',
                                   fontSize: 11,
                                   fontWeight: FontWeight.w700,
                                   color: Colors.black)),
                         ),
                         const SizedBox(height: 2),
                         Text('Most Popular',
-                            style: TextStyle(fontFamily: 'Satoshi', 
+                            style: TextStyle(fontFamily: 'Satoshi',
                                 fontSize: 9,
                                 fontWeight: FontWeight.w500,
                                 color: gold)),
@@ -284,21 +311,21 @@ class _ComparisonTable extends StatelessWidget {
                       Expanded(
                         flex: 2,
                         child: Text(c.feature,
-                            style: TextStyle(fontFamily: 'Satoshi', 
+                            style: TextStyle(fontFamily: 'Satoshi',
                                 fontSize: 13, color: cs.onSurface)),
                       ),
                       Expanded(
                         flex: 1,
                         child: Text(c.free,
                             textAlign: TextAlign.center,
-                            style: const TextStyle(fontFamily: 'Satoshi', 
+                            style: const TextStyle(fontFamily: 'Satoshi',
                                 fontSize: 13, color: Colors.grey)),
                       ),
                       Expanded(
                         flex: 1,
                         child: Text(c.premium,
                             textAlign: TextAlign.center,
-                            style: TextStyle(fontFamily: 'Satoshi', 
+                            style: TextStyle(fontFamily: 'Satoshi',
                                 fontSize: 13,
                                 fontWeight: FontWeight.w600,
                                 color: gold)),

@@ -1,11 +1,6 @@
-import 'package:flutter/material.dart';
-import 'package:flutterwave_standard/flutterwave.dart';
-import 'package:flutterwave_standard/models/requests/customer.dart';
-import 'package:flutterwave_standard/models/requests/customizations.dart';
-import 'package:flutterwave_standard/models/responses/charge_response.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
-import '../config/flutterwave_config.dart';
+import '../config/payment_config.dart';
 import '../config/constants.dart';
 import 'firebase_service.dart';
 import 'hive_service.dart';
@@ -15,46 +10,51 @@ class PaymentService {
   static final PaymentService _instance = PaymentService._();
   static PaymentService get instance => _instance;
 
-  Future<ChargeResponse?> initiatePremiumPayment(BuildContext context) async {
+  String? _currentExternalId;
+
+  Future<Map<String, dynamic>> initiateMnoCheckout({
+    required String phoneNumber,
+    required String provider,
+  }) async {
     final user = HiveService.instance.getUser();
-    if (user == null) return null;
+    if (user == null) return {'success': false, 'error': 'User not found'};
 
-    final email = user.email ?? 'user@timbo.app';
-    final name = user.name.isNotEmpty ? user.name : 'Timbo User';
-    final txRef = 'TMB-${DateTime.now().millisecondsSinceEpoch}-${user.id.substring(0, 8)}';
+    final externalId =
+        'TMB-${DateTime.now().millisecondsSinceEpoch}-${user.id.substring(0, 6)}';
+    _currentExternalId = externalId;
 
-    final customer = Customer(name: name, phoneNumber: '', email: email);
-    final customization = Customization(
-      title: 'Timbo Premium',
-      description: 'Unlock all premium features',
-      logo: '',
-    );
-
-    final flutterwave = Flutterwave(
-      publicKey: FlutterwaveConfig.publicKey,
-      txRef: txRef,
-      amount: AppConstants.premiumPrice.toStringAsFixed(0),
-      customer: customer,
-      paymentOptions: 'card, mobilemoneytz, ussd',
-      customization: customization,
-      redirectUrl: FlutterwaveConfig.redirectUrl,
-      isTestMode: FlutterwaveConfig.publicKey.contains('test'),
-      currency: FlutterwaveConfig.currency,
-      meta: {'userId': user.id},
-    );
-
-    return await flutterwave.charge(context);
-  }
-
-  Future<bool> verifyPayment(String txRef) async {
     try {
       final response = await http.post(
-        Uri.parse('${FlutterwaveConfig.proxyUrl}/verify-payment'),
+        Uri.parse('${PaymentConfig.proxyUrl}/azampay-checkout'),
         headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({'tx_ref': txRef}),
+        body: jsonEncode({
+          'phone_number': phoneNumber,
+          'amount': AppConstants.premiumPrice.toStringAsFixed(0),
+          'currency': PaymentConfig.currency,
+          'provider': provider,
+          'external_id': externalId,
+          'app_name': PaymentConfig.appName,
+          'client_id': PaymentConfig.clientId,
+          'client_secret': PaymentConfig.clientSecret,
+        }),
+      );
+
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body) as Map<String, dynamic>;
+      }
+      return {'success': false, 'error': 'Server error: ${response.statusCode}'};
+    } catch (e) {
+      return {'success': false, 'error': e.toString()};
+    }
+  }
+
+  Future<bool> verifyPayment(String externalId) async {
+    try {
+      final response = await http.get(
+        Uri.parse('${PaymentConfig.proxyUrl}/azampay-verify?external_id=$externalId'),
       );
       if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
+        final data = jsonDecode(response.body) as Map<String, dynamic>;
         return data['verified'] == true;
       }
       return false;
@@ -63,16 +63,28 @@ class PaymentService {
     }
   }
 
-  Future<bool> subscribe(BuildContext context) async {
-    final response = await initiatePremiumPayment(context);
-    if (response == null) return false;
+  Future<bool> subscribe({
+    required String phoneNumber,
+    required String provider,
+  }) async {
+    final result = await initiateMnoCheckout(
+      phoneNumber: phoneNumber,
+      provider: provider,
+    );
 
-    if (response.success == true && response.status == 'success') {
-      final verified = await verifyPayment(response.txRef);
+    if (result['success'] != true) {
+      return false;
+    }
+
+    final externalId = (result['external_id'] as String?) ?? _currentExternalId;
+    if (externalId == null) return false;
+
+    for (var i = 0; i < 40; i++) {
+      final verified = await verifyPayment(externalId);
       if (verified) {
-        final userId = FirebaseService.instance.currentUser?.uid;
-        if (userId != null) {
-          await FirebaseService.instance.setPremiumStatus(userId, true);
+        final uid = FirebaseService.instance.currentUser?.uid;
+        if (uid != null) {
+          await FirebaseService.instance.setPremiumStatus(uid, true);
         }
         final user = HiveService.instance.getUser();
         if (user != null) {
@@ -81,6 +93,7 @@ class PaymentService {
         }
         return true;
       }
+      await Future.delayed(const Duration(seconds: 3));
     }
     return false;
   }

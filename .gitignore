@@ -48,5 +48,6 @@ app.*.map.json
 # Secrets — never commit API keys
 /lib/config/secrets.dart
 
-# Flutterwave API keys
+# Payment API keys
+/lib/config/payment_config.dart
 /lib/config/flutterwave_config.dart

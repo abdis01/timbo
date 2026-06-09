@@ -69,22 +69,22 @@ class PremiumService {
     switch (blockedFeature) {
       case 'ai_chat':
         return 'You\'ve used all your free AI conversations today. '
-            'Upgrade to Premium for \$${AppConstants.premiumPrice.toStringAsFixed(2)}/month!';
+            'Upgrade to Premium for TZS ${AppConstants.premiumPrice.toStringAsFixed(0)}/month!';
       case 'quick_capture':
         return 'Free users can only capture 20 items per day. '
             'Upgrade to Premium for unlimited captures!';
       case 'cloud_sync':
         return 'Cloud sync is a Premium feature. '
-            'Upgrade for \$${AppConstants.premiumPrice.toStringAsFixed(2)}/month to keep your data safe across devices!';
+            'Upgrade for TZS ${AppConstants.premiumPrice.toStringAsFixed(0)}/month to keep your data safe across devices!';
       case 'insights':
         return 'Advanced insights and analytics are available with Premium. '
-            'Upgrade for \$${AppConstants.premiumPrice.toStringAsFixed(2)}/month!';
+            'Upgrade for TZS ${AppConstants.premiumPrice.toStringAsFixed(0)}/month!';
       case 'finance_analysis':
         return 'Spending analysis is available with Premium. '
-            'Upgrade for \$${AppConstants.premiumPrice.toStringAsFixed(2)}/month!';
+            'Upgrade for TZS ${AppConstants.premiumPrice.toStringAsFixed(0)}/month!';
       default:
         return 'This feature is available with Premium for '
-            '\$${AppConstants.premiumPrice.toStringAsFixed(2)}/month. Upgrade to unlock it!';
+            'TZS ${AppConstants.premiumPrice.toStringAsFixed(0)}/month. Upgrade to unlock it!';
     }
   }
 }

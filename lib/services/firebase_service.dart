@@ -37,6 +37,7 @@ class FirebaseService {
         await Firebase.initializeApp(
           options: DefaultFirebaseOptions.currentPlatform,
         );
+        await GoogleSignIn.instance.initialize();
         _isAvailable = true;
       } catch (_) {
         _isAvailable = false;
@@ -66,11 +67,14 @@ class FirebaseService {
   }
 
   Future<UserCredential?> signInWithGoogle() async {
-    final googleUser = await GoogleSignIn().signIn();
-    if (googleUser == null) return null;
-    final googleAuth = await googleUser.authentication;
+    late final GoogleSignInAccount googleUser;
+    try {
+      googleUser = await GoogleSignIn.instance.authenticate();
+    } catch (_) {
+      return null;
+    }
+    final googleAuth = googleUser.authentication;
     final credential = GoogleAuthProvider.credential(
-      accessToken: googleAuth.accessToken,
       idToken: googleAuth.idToken,
     );
     final cred = await _authRef.signInWithCredential(credential);
@@ -89,7 +93,7 @@ class FirebaseService {
 
   Future<void> signOut() async {
     await _authRef.signOut();
-    await GoogleSignIn().signOut();
+    await GoogleSignIn.instance.signOut();
   }
 
   User? get currentUser => _isAvailable ? _authRef.currentUser : null;

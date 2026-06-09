@@ -16,9 +16,9 @@ class AppConstants {
 
   static const String hiveChatBox = 'timbo_chat';
 
-  // Reserved for future Stripe/Google Play integration
-  static const double premiumPrice = 3.99;
-  static const String premiumPriceLabel = '\$3.99/month';
+  // AzamPay mobile money pricing (TZS)
+  static const double premiumPrice = 10000;
+  static const String premiumPriceLabel = 'TZS 10,000/month';
 
   // Gemini API proxy — key stays on server, never in the app binary
   // Set to null to use direct API (dev mode, key in secrets.dart)

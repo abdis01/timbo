@@ -44,7 +44,7 @@ class NotificationService {
       ),
     );
     await _plugin.initialize(
-      settings,
+      settings: settings,
       onDidReceiveNotificationResponse: _onNotificationTap,
     );
     _initialized = true;
@@ -112,18 +112,16 @@ class NotificationService {
     final tzScheduled = tz.TZDateTime.from(scheduledAt, location);
 
     await _plugin.zonedSchedule(
-      intId,
-      title,
-      body,
-      tzScheduled,
-      const NotificationDetails(
+      id: intId,
+      title: title,
+      body: body,
+      scheduledDate: tzScheduled,
+      notificationDetails: const NotificationDetails(
         android: AndroidNotificationDetails('reminders', 'Reminders',
             importance: Importance.high, priority: Priority.high),
         iOS: DarwinNotificationDetails(),
       ),
       androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
-      uiLocalNotificationDateInterpretation:
-          UILocalNotificationDateInterpretation.absoluteTime,
       matchDateTimeComponents: DateTimeComponents.dateAndTime,
       payload: '/reminders',
     );
@@ -151,18 +149,16 @@ class NotificationService {
         : DateTimeComponents.dayOfWeekAndTime;
 
     await _plugin.zonedSchedule(
-      intId,
-      title,
-      body,
-      tzScheduled,
-      const NotificationDetails(
+      id: intId,
+      title: title,
+      body: body,
+      scheduledDate: tzScheduled,
+      notificationDetails: const NotificationDetails(
         android: AndroidNotificationDetails('reminders', 'Reminders',
             importance: Importance.high, priority: Priority.high),
         iOS: DarwinNotificationDetails(),
       ),
       androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
-      uiLocalNotificationDateInterpretation:
-          UILocalNotificationDateInterpretation.absoluteTime,
       matchDateTimeComponents: component,
       payload: '/reminders',
     );
@@ -170,7 +166,7 @@ class NotificationService {
 
   static Future<void> cancelNotification(String id) async {
     if (_notificationIds.containsKey(id)) {
-      await _plugin.cancel(_notificationIds[id]!);
+      await _plugin.cancel(id: _notificationIds[id]!);
       _notificationIds.remove(id);
     }
   }
@@ -193,7 +189,12 @@ class NotificationService {
           importance: Importance.high, priority: Priority.high),
       iOS: DarwinNotificationDetails(),
     );
-    await _plugin.show(intId, title, body, details);
+    await _plugin.show(
+      id: intId,
+      title: title,
+      body: body,
+      notificationDetails: details,
+    );
   }
 
   static Future<void> scheduleDailyInsightNotification() async {
@@ -209,19 +210,17 @@ class NotificationService {
     final tzScheduled = tz.TZDateTime.from(scheduledAt, location);
 
     await _plugin.zonedSchedule(
-      intId,
-      'Your Daily Timbo Insight',
-      'Tap to see your personalized insights for today',
-      tzScheduled,
-      const NotificationDetails(
+      id: intId,
+      title: 'Your Daily Timbo Insight',
+      body: 'Tap to see your personalized insights for today',
+      scheduledDate: tzScheduled,
+      notificationDetails: const NotificationDetails(
         android: AndroidNotificationDetails('insights', 'AI Insights',
             importance: Importance.defaultImportance,
             priority: Priority.defaultPriority),
         iOS: DarwinNotificationDetails(),
       ),
       androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
-      uiLocalNotificationDateInterpretation:
-          UILocalNotificationDateInterpretation.absoluteTime,
       matchDateTimeComponents: DateTimeComponents.time,
       payload: '/insights',
     );
@@ -250,15 +249,15 @@ class NotificationService {
     );
 
     await _plugin.show(
-      _quickCaptureNotificationId,
-      'Timbo',
-      'Tap to quick capture',
-      details,
+      id: _quickCaptureNotificationId,
+      title: 'Timbo',
+      body: 'Tap to quick capture',
+      notificationDetails: details,
       payload: '/home',
     );
   }
 
   static Future<void> cancelPersistentQuickCaptureNotification() async {
-    await _plugin.cancel(_quickCaptureNotificationId);
+    await _plugin.cancel(id: _quickCaptureNotificationId);
   }
 }
