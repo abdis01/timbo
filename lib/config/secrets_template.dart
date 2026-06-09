@@ -2,6 +2,6 @@
 // THIS FILE IS NOT GITIGNORED — do NOT put real keys here.
 
 class Secrets {
-  // Get your Gemini API key at https://aistudio.google.com/apikey
-  static const geminiApiKey = 'YOUR_GEMINI_API_KEY_HERE';
+  // Get your Groq API key at https://console.groq.com
+  static const groqApiKey = 'YOUR_GROQ_API_KEY_HERE';
 }

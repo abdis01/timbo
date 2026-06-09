@@ -20,9 +20,9 @@ class AppConstants {
   static const double premiumPrice = 10000;
   static const String premiumPriceLabel = 'TZS 10,000/month';
 
-  // Gemini API proxy — key stays on server, never in the app binary
+  // AI proxy — key stays on server, never in the app binary
   // Set to null to use direct API (dev mode, key in secrets.dart)
   // Local: "http://localhost:3000"
   // Remote: "https://your-proxy-url.com"
-  static const String geminiProxyUrl = 'https://timbo-gemini-proxy.abdimagoye26.workers.dev';
+  static const String aiProxyUrl = 'https://timbo-gemini-proxy.abdimagoye26.workers.dev';
 }

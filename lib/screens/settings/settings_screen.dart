@@ -990,7 +990,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
           const SizedBox(height: 8),
           Text(
-            'Made with ❤️ — Powered by Gemini AI',
+            'Made with ❤️ — Powered by Groq AI',
             style: TextStyle(fontFamily: 'Satoshi', 
                 fontSize: 12, color: textSecondary.withValues(alpha: 0.7)),
           ),

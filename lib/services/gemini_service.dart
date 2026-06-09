@@ -1,7 +1,4 @@
 import 'dart:convert';
-import 'package:flutter/foundation.dart';
-import 'package:google_generative_ai/google_generative_ai.dart';
-import 'package:firebase_remote_config/firebase_remote_config.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:http/http.dart' as http;
 import '../models/chat_message.dart';
@@ -9,19 +6,13 @@ import '../config/secrets.dart';
 import 'hive_service.dart';
 import 'firebase_service.dart';
 
-extension on String {
-  Content asContent(String role) => Content(role, [TextPart(this)]);
-}
-
 class GeminiService {
   GeminiService._();
 
   static final GeminiService _instance = GeminiService._();
   static GeminiService get instance => _instance;
 
-  GenerativeModel? _model;
-  bool _initialized = false;
-  String _apiKey = Secrets.geminiApiKey;
+  final String _apiKey = Secrets.groqApiKey;
   String _cachedContext = '';
   DateTime _lastContextBuild = DateTime.now().subtract(const Duration(minutes: 1));
   String? _proxyUrl;
@@ -44,35 +35,6 @@ Your role is to be helpful, proactive, and warm. When answering questions:
 
 Never make up data — only reference what's in the context provided. Be friendly and conversational, like a trusted assistant who knows them well.
 ''';
-
-  Future<void> initialize() async {
-    if (_initialized) return;
-    try {
-      await _fetchApiKeyFromRemoteConfig();
-    } catch (_) {}
-    try {
-      _model = GenerativeModel(
-        model: 'gemini-2.0-flash',
-        apiKey: _apiKey,
-        systemInstruction: Content.system(_systemPrompt),
-      );
-      _initialized = true;
-    } catch (e) {
-      debugPrint('Gemini init error: $e');
-    }
-  }
-
-  Future<void> _fetchApiKeyFromRemoteConfig() async {
-    try {
-      final remoteConfig = FirebaseRemoteConfig.instance;
-      await remoteConfig.setDefaults({'gemini_api_key': _apiKey});
-      await remoteConfig.fetchAndActivate();
-      final fetched = remoteConfig.getString('gemini_api_key');
-      if (fetched.isNotEmpty && fetched != _apiKey) {
-        _apiKey = fetched;
-      }
-    } catch (_) {}
-  }
 
   String buildContext() {
     if (DateTime.now().difference(_lastContextBuild).inSeconds < 30) {
@@ -163,26 +125,7 @@ Never make up data — only reference what's in the context provided. Be friendl
     if (_proxyUrl != null) {
       return _sendViaProxy(userMessage, history);
     }
-    if (!_initialized) await initialize();
-    if (_model == null) return "I'm having trouble connecting. Please try again.";
-
-    try {
-      final context = buildContext();
-      final contents = <Content>[];
-
-      contents.add('Here is the current user context:\n\n$context'.asContent('user'));
-
-      for (final msg in history) {
-        contents.add(msg.content.asContent(msg.isUser ? 'user' : 'model'));
-      }
-
-      contents.add(userMessage.asContent('user'));
-
-      final response = await _model!.generateContent(contents);
-      return response.text ?? "I'm not sure how to respond to that.";
-    } catch (e) {
-      return "I encountered an error. Please try again.";
-    }
+    return _sendDirect(userMessage, history);
   }
 
   Future<String> _sendViaProxy(
@@ -207,7 +150,7 @@ Never make up data — only reference what's in the context provided. Be friendl
       ];
 
       final response = await http.post(
-        Uri.parse('$_proxyUrl/geminiChat'),
+        Uri.parse('$_proxyUrl/groqChat'),
         headers: {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer $token',
@@ -230,6 +173,48 @@ Never make up data — only reference what's in the context provided. Be friendl
     }
   }
 
+  Future<String> _sendDirect(
+    String userMessage,
+    List<ChatMessage> history,
+  ) async {
+    try {
+      final context = buildContext();
+      final messages = [
+        {'role': 'system', 'content': _systemPrompt},
+        {'role': 'user', 'content': 'Here is the current user context:\n\n$context'},
+        ...history.map((m) => {
+          'role': m.isUser ? 'user' : 'assistant',
+          'content': m.content,
+        }),
+        {'role': 'user', 'content': userMessage},
+      ];
+
+      final response = await http.post(
+        Uri.parse('https://api.groq.com/openai/v1/chat/completions'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $_apiKey',
+        },
+        body: jsonEncode({
+          'model': 'llama-3.3-70b-versatile',
+          'messages': messages,
+          'temperature': 0.7,
+          'max_tokens': 1024,
+        }),
+      );
+
+      if (response.statusCode == 200) {
+        final body = jsonDecode(response.body) as Map<String, dynamic>;
+        final text = body['choices']?[0]?['message']?['content'] as String?;
+        return text ?? "I'm not sure how to respond.";
+      }
+
+      return "I encountered an error. Please try again.";
+    } catch (_) {
+      return "I encountered an error. Please try again.";
+    }
+  }
+
   bool canSendMessage() {
     if (!FirebaseService.instance.isLoggedIn) return false;
     return HiveService.instance.canUserUseAI();
@@ -246,18 +231,7 @@ Never make up data — only reference what's in the context provided. Be friendl
   Future<String> generateDailyInsight(String type) async {
     if (!FirebaseService.instance.isLoggedIn) return 'Sign in to get daily AI insights.';
     if (_proxyUrl != null) return _generateViaProxy(type);
-    if (!_initialized) await initialize();
-    if (_model == null) return 'Check your finances and notes to stay on track today!';
-
-    try {
-      final context = buildContext();
-      final prompt = '$_systemPrompt\n\nBased on this context, give a single $type insight (1-2 sentences):\n\n$context';
-      final response = await _model!.generateContent([Content('user', [TextPart(prompt)])]);
-      return response.text ??
-          'You\'re doing great! Keep up with your notes and budget.';
-    } catch (_) {
-      return 'Stay productive today! Check your reminders and notes.';
-    }
+    return _generateDirect(type);
   }
 
   Future<String> _generateViaProxy(String type) async {
@@ -269,7 +243,7 @@ Never make up data — only reference what's in the context provided. Be friendl
       final prompt = '$_systemPrompt\n\nBased on this context, give a single $type insight (1-2 sentences):\n\n$context';
 
       final response = await http.post(
-        Uri.parse('$_proxyUrl/geminiGenerate'),
+        Uri.parse('$_proxyUrl/groqGenerate'),
         headers: {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer $token',
@@ -280,6 +254,38 @@ Never make up data — only reference what's in the context provided. Be friendl
       if (response.statusCode == 200) {
         final body = jsonDecode(response.body) as Map<String, dynamic>;
         return (body['text'] as String?) ?? 'You\'re doing great! Keep up with your notes and budget.';
+      }
+      return 'AI service is busy. Try again later.';
+    } catch (_) {
+      return 'Stay productive today! Check your reminders and notes.';
+    }
+  }
+
+  Future<String> _generateDirect(String type) async {
+    try {
+      final context = buildContext();
+      final prompt = '$_systemPrompt\n\nBased on this context, give a single $type insight (1-2 sentences):\n\n$context';
+
+      final response = await http.post(
+        Uri.parse('https://api.groq.com/openai/v1/chat/completions'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $_apiKey',
+        },
+        body: jsonEncode({
+          'model': 'llama-3.3-70b-versatile',
+          'messages': [
+            {'role': 'user', 'content': prompt},
+          ],
+          'temperature': 0.7,
+          'max_tokens': 256,
+        }),
+      );
+
+      if (response.statusCode == 200) {
+        final body = jsonDecode(response.body) as Map<String, dynamic>;
+        final text = body['choices']?[0]?['message']?['content'] as String?;
+        return text ?? 'You\'re doing great! Keep up with your notes and budget.';
       }
       return 'AI service is busy. Try again later.';
     } catch (_) {

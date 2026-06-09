@@ -49,12 +49,6 @@ class _ChatScreenState extends State<ChatScreen>
   }
 
   Future<void> _initChat() async {
-    try {
-      await GeminiService.instance.initialize();
-    } catch (_) {
-      if (mounted) setState(() => _hasError = true);
-      return;
-    }
     if (!mounted) return;
     final user = context.read<UserProvider>().user;
     final name = user?.name ?? 'Friend';

@@ -52,7 +52,7 @@ class PrivacyScreen extends StatelessWidget {
           _sectionTitle('Third-Party Services', textPrimary),
           _body(
             '• Firebase (Google): authentication, cloud storage, crash reporting.\n'
-            '• Gemini AI (Google): AI chat and insights (anonymous, no personal data sent).',
+            '• Groq AI: AI chat and insights (anonymous, no personal data sent).',
             textSecondary,
           ),
           const SizedBox(height: 20),

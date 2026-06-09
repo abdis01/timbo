@@ -1,7 +1,8 @@
-// Timbo Gemini API Proxy + AzamPay Payment — Cloudflare Worker
+// Timbo AI + Payment Proxy — Cloudflare Worker
+// Supports Groq (primary) and Gemini (fallback)
 
-const GEMINI_MODEL = 'gemini-2.0-flash';
-const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}`;
+const GROQ_MODEL = 'llama-3.3-70b-versatile';
+const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions';
 
 const AZAMPAY_AUTH_SANDBOX = 'https://authenticator-sandbox.azampay.co.tz/AppAuth';
 const AZAMPAY_AUTH_PROD = 'https://authenticator.azampay.co.tz/AppAuth';
@@ -34,11 +35,7 @@ async function azampayAuth(appName, clientId, clientSecret, isSandbox) {
   const resp = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      appName,
-      clientId,
-      clientSecret,
-    }),
+    body: JSON.stringify({ appName, clientId, clientSecret }),
   });
   if (!resp.ok) return null;
   const data = await resp.json();
@@ -67,6 +64,21 @@ async function azampayMnoCheckout(accessToken, payload, isSandbox) {
   return { ok: resp.ok, data };
 }
 
+function buildGroqMessages(prompt, history, systemPrompt) {
+  const messages = [];
+  if (systemPrompt) {
+    messages.push({ role: 'system', content: systemPrompt });
+  }
+  if (history && Array.isArray(history)) {
+    for (const msg of history) {
+      const role = msg.role === 'model' || msg.role === 'assistant' ? 'assistant' : 'user';
+      messages.push({ role, content: msg.content || msg.parts || '' });
+    }
+  }
+  messages.push({ role: 'user', content: prompt });
+  return messages;
+}
+
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
@@ -89,16 +101,12 @@ export default {
           return errorResponse('Missing required fields', 400);
         }
 
-        // Check if using sandbox (based on client_secret pattern or env flag)
         const isSandbox = env.AZAMPAY_SANDBOX !== 'false';
-
-        // Authenticate with AzamPay
         const token = await azampayAuth(app_name, client_id, client_secret, isSandbox);
         if (!token) {
           return errorResponse('Authentication failed', 502);
         }
 
-        // Initiate checkout
         const result = await azampayMnoCheckout(token, { phone_number, amount, currency, provider, external_id }, isSandbox);
 
         if (!result.ok) {
@@ -126,10 +134,6 @@ export default {
         const externalId = url.searchParams.get('external_id');
         if (!externalId) return errorResponse('Missing external_id', 400);
 
-        // For sandbox testing, we simulate verification
-        // In production, this would call AzamPay's transaction status API
-        // AzamPay sends callbacks to /azampay-callback which stores results in KV
-
         const verified = await env.PAYMENTS?.get(externalId);
         return jsonResponse({
           verified: verified === 'confirmed',
@@ -148,7 +152,6 @@ export default {
         const status = body.status || body.transactionStatus || 'completed';
 
         if (externalId && (status === 'success' || status === 'completed')) {
-          // Store in KV for verification
           try {
             await env.PAYMENTS?.put(externalId, 'confirmed', { expirationTtl: 86400 });
           } catch (_) {}
@@ -160,7 +163,7 @@ export default {
       }
     }
 
-    // --- Payment callback (user sees after redirect — kept for backward compat) ---
+    // --- Payment callback (backward compat) ---
     if (url.pathname === '/payment-callback' && request.method === 'GET') {
       return jsonResponse({
         status: 'completed',
@@ -168,13 +171,13 @@ export default {
       });
     }
 
-    // --- Gemini proxy endpoints ---
+    // --- AI proxy endpoints (Groq) ---
     if (request.method !== 'POST') {
       return errorResponse('Method not allowed', 405);
     }
 
-    const apiKey = env.GEMINI_API_KEY;
-    if (!apiKey) return errorResponse('Server misconfigured', 500);
+    const apiKey = env.GROQ_API_KEY;
+    if (!apiKey) return errorResponse('Server misconfigured', 502);
 
     // Rate limiting
     const ip = request.headers.get('CF-Connecting-IP') || 'unknown';
@@ -198,39 +201,33 @@ export default {
         return errorResponse('Missing "prompt"', 400);
       }
 
-      const contents = [];
-      if (history) {
-        for (const msg of history) {
-          contents.push({
-            role: msg.role === 'model' ? 'model' : 'user',
-            parts: [{ text: msg.content || msg.parts || '' }],
-          });
-        }
-      }
-      contents.push({ role: 'user', parts: [{ text: prompt }] });
+      const messages = buildGroqMessages(prompt, history, systemPrompt);
 
-      const geminiBody = {
-        contents,
-        systemInstruction: systemPrompt
-          ? { parts: [{ text: systemPrompt }] }
-          : undefined,
+      const groqBody = {
+        model: GROQ_MODEL,
+        messages,
+        temperature: 0.7,
+        max_tokens: 1024,
       };
 
-      const isChat = url.pathname === '/geminiChat' || url.pathname === '/chat';
-      const response = await fetch(`${GEMINI_URL}:generateContent?key=${apiKey}`, {
+      const response = await fetch(GROQ_URL, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(geminiBody),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify(groqBody),
       });
 
       const data = await response.json();
 
       if (!response.ok) {
-        console.error('Gemini API error:', response.status, JSON.stringify(data));
+        console.error('Groq API error:', response.status, JSON.stringify(data));
         return errorResponse('AI service unavailable', 502);
       }
 
-      const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+      const text = data.choices?.[0]?.message?.content || '';
+      const isChat = url.pathname === '/groqChat' || url.pathname === '/chat';
       return jsonResponse({ [isChat ? 'reply' : 'text']: text });
     } catch (err) {
       console.error('Worker error:', err.message);

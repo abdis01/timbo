@@ -27,9 +27,9 @@ void main() async {
     await FirebaseService.init();
   } catch (_) {}
 
-  // Configure Gemini API proxy (set geminiProxyUrl in constants.dart for production)
+  // Configure AI proxy
   GeminiService.instance.configure(
-    proxyUrl: AppConstants.geminiProxyUrl,
+    proxyUrl: AppConstants.aiProxyUrl,
   );
 
   // Set up Crashlytics only if Firebase is available

@@ -27,6 +27,8 @@ jobs:
         with:
           flutter-version: '3.44.0'
           channel: 'stable'
+      - name: Create secrets.dart for CI
+        run: cp lib/config/secrets_template.dart lib/config/secrets.dart
       - run: flutter pub get
       - run: flutter build apk --debug --android-skip-build-dependency-validation
       - uses: actions/upload-artifact@v4
