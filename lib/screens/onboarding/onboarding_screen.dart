@@ -26,19 +26,19 @@ class _OnboardingScreenState extends State<OnboardingScreen>
 
   final _pageData = const [
     _PageData(
-      image: TimboImages.onboardingCapture,
+      image: TimboImages.onboarding1,
       title: 'Notes & Quick Capture',
       body: 'Jot down thoughts, snap photos, or record voice memos — even when your phone is locked. Timbo keeps it all organized.',
       icon: Icons.edit_note_rounded,
     ),
     _PageData(
-      image: TimboImages.onboardingAi,
+      image: TimboImages.onboarding2,
       title: 'AI That Knows You',
       body: 'Chat with Timbo about anything. It reads your notes, tracks your spending, and gives insights that actually matter.',
       icon: Icons.psychology_rounded,
     ),
     _PageData(
-      image: TimboImages.onboardingRemember,
+      image: TimboImages.onboarding3,
       title: 'Finance & Reminders',
       body: 'Track expenses by category, set budgets, and never miss a bill. Timbo reminds you so you don\'t have to remember.',
       icon: Icons.account_balance_wallet_rounded,

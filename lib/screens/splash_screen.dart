@@ -28,7 +28,7 @@ class _SplashScreenState extends State<SplashScreen>
     super.initState();
     _controller = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 2600),
+      duration: const Duration(milliseconds: 4000),
     );
 
     _bgFade = Tween<double>(begin: 0, end: 1).animate(
@@ -58,13 +58,13 @@ class _SplashScreenState extends State<SplashScreen>
     _taglineFade = Tween<double>(begin: 0, end: 1).animate(
       CurvedAnimation(
         parent: _controller,
-        curve: const Interval(0.54, 0.73, curve: Curves.easeIn),
+        curve: const Interval(0.54, 0.8, curve: Curves.easeIn),
       ),
     );
     _exitFade = Tween<double>(begin: 1, end: 0).animate(
       CurvedAnimation(
         parent: _controller,
-        curve: const Interval(0.77, 1.0, curve: Curves.easeOut),
+        curve: const Interval(0.85, 1.0, curve: Curves.easeOut),
       ),
     );
 
@@ -79,7 +79,7 @@ class _SplashScreenState extends State<SplashScreen>
   }
 
   Future<void> _navigateAfterDelay() async {
-    await Future.delayed(const Duration(milliseconds: 2600));
+    await Future.delayed(const Duration(milliseconds: 4000));
     if (!mounted) return;
 
     try {
