@@ -1,39 +1,18 @@
 import 'dart:ui' show PlatformDispatcher;
-
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
-import 'services/hive_service.dart';
-import 'services/firebase_service.dart';
-import 'services/gemini_service.dart';
-import 'services/notification_service.dart';
-import 'config/constants.dart';
-import 'providers/notes_provider.dart';
-import 'providers/finance_provider.dart';
-import 'providers/reminders_provider.dart';
-import 'providers/user_provider.dart';
+import 'firebase_options.dart';
 import 'app.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   try {
-    await HiveService.instance.init();
-  } catch (e) {
-    debugPrint('Hive init error: $e');
-  }
-
-  try {
-    await FirebaseService.init();
-  } catch (_) {}
-
-  // Configure AI proxy
-  GeminiService.instance.configure(
-    proxyUrl: AppConstants.aiProxyUrl,
-  );
-
-  // Set up Crashlytics only if Firebase is available
-  if (FirebaseService.instance.isAvailable) {
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
     FlutterError.onError = (details) {
       FirebaseCrashlytics.instance.recordFlutterFatalError(details);
     };
@@ -41,25 +20,15 @@ void main() async {
       FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
       return true;
     };
-  } else {
+  } catch (_) {
     FlutterError.onError = (details) {
       debugPrint('FlutterError: ${details.exception}\n${details.stack}');
     };
   }
 
-  try {
-    await NotificationService.initialize();
-  } catch (_) {}
-
   runApp(
-    MultiProvider(
-      providers: [
-        ChangeNotifierProvider(create: (_) => NotesProvider()),
-        ChangeNotifierProvider(create: (_) => FinanceProvider()),
-        ChangeNotifierProvider(create: (_) => RemindersProvider()),
-        ChangeNotifierProvider(create: (_) => UserProvider()),
-      ],
-      child: const CrashGuard(child: TimboApp()),
+    const ProviderScope(
+      child: CrashGuard(child: TimboApp()),
     ),
   );
 }
@@ -89,22 +58,12 @@ class _CrashGuardState extends State<CrashGuard> {
                 const SizedBox(height: 16),
                 const Text(
                   'Something went wrong',
-                  style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.white,
-                  ),
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600, color: Colors.white),
                 ),
                 const SizedBox(height: 8),
                 Text(
                   details.exception.toString(),
                   style: const TextStyle(fontSize: 14, color: Colors.yellowAccent),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  details.stack?.toString().split('\n').take(10).join('\n') ?? '',
-                  style: const TextStyle(fontSize: 10, color: Colors.white54),
                   textAlign: TextAlign.center,
                 ),
               ],
@@ -116,7 +75,5 @@ class _CrashGuardState extends State<CrashGuard> {
   }
 
   @override
-  Widget build(BuildContext context) {
-    return widget.child;
-  }
+  Widget build(BuildContext context) => widget.child;
 }

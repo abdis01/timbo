@@ -1,185 +1,143 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:home_widget/home_widget.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+import 'providers/providers.dart';
 import 'config/theme.dart';
-import 'config/routes.dart';
-import 'providers/user_provider.dart';
-import 'services/notification_service.dart';
-import 'services/shake_service.dart';
+import 'screens/home_screen.dart';
+import 'screens/vault_screen.dart';
+import 'screens/profile_screen.dart';
+import 'screens/splash_screen.dart';
+import 'screens/onboarding_screen.dart';
+import 'screens/auth_screen.dart';
 import 'services/sync_service.dart';
-import 'services/widget_service.dart';
-import 'widgets/quick_capture_popup.dart';
+import 'services/shake_service.dart';
 
-final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
+final _rootNavigatorKey = GlobalKey<NavigatorState>();
+final _shellNavigatorKey = GlobalKey<NavigatorState>();
 
-class TimboApp extends StatefulWidget {
+final routerProvider = Provider<GoRouter>((ref) {
+  return GoRouter(
+    navigatorKey: _rootNavigatorKey,
+    initialLocation: '/splash',
+    routes: [
+      GoRoute(
+        path: '/splash',
+        builder: (_, __) => const SplashScreen(),
+      ),
+      GoRoute(
+        path: '/onboarding',
+        builder: (_, __) => const OnboardingScreen(),
+      ),
+      GoRoute(
+        path: '/auth',
+        builder: (_, __) => const AuthScreen(),
+      ),
+      ShellRoute(
+        navigatorKey: _shellNavigatorKey,
+        builder: (_, __, child) => _Shell(child: child),
+        routes: [
+          GoRoute(
+            path: '/home',
+            pageBuilder: (_, __) => NoTransitionPage(child: const HomeScreen()),
+          ),
+          GoRoute(
+            path: '/vault',
+            pageBuilder: (_, __) => NoTransitionPage(child: const VaultScreen()),
+          ),
+          GoRoute(
+            path: '/profile',
+            pageBuilder: (_, __) => NoTransitionPage(child: const ProfileScreen()),
+          ),
+        ],
+      ),
+    ],
+  );
+});
+
+class _Shell extends ConsumerWidget {
+  final Widget child;
+  const _Shell({required this.child});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final location = GoRouterState.of(context).uri.toString();
+    int currentIndex = 0;
+    if (location.contains('/vault')) currentIndex = 1;
+    if (location.contains('/profile')) currentIndex = 2;
+
+    return Scaffold(
+      body: child,
+      bottomNavigationBar: BottomNavigationBar(
+        currentIndex: currentIndex,
+        onTap: (i) {
+          switch (i) {
+            case 0: context.go('/home');
+            case 1: context.go('/vault');
+            case 2: context.go('/profile');
+          }
+        },
+        items: const [
+          BottomNavigationBarItem(icon: Icon(Icons.home_rounded), label: ''),
+          BottomNavigationBarItem(icon: Icon(Icons.inbox_rounded), label: ''),
+          BottomNavigationBarItem(icon: Icon(Icons.person_rounded), label: ''),
+        ],
+      ),
+    );
+  }
+}
+
+class TimboApp extends ConsumerStatefulWidget {
   const TimboApp({super.key});
 
   @override
-  State<TimboApp> createState() => _TimboAppState();
+  ConsumerState<TimboApp> createState() => _TimboAppState();
 }
 
-class _TimboAppState extends State<TimboApp> with WidgetsBindingObserver {
-  bool _isOnline = true;
+class _TimboAppState extends ConsumerState<TimboApp> {
+  SyncService? _syncService;
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addObserver(this);
-    NotificationService.navigatorKey = navigatorKey;
-
-    try {
-      ShakeService.instance.navigatorKey = navigatorKey;
-      ShakeService.instance.initialize();
-    } catch (_) {}
-
-    SyncService.instance.initialize();
-    SyncService.instance.addListener(_onSyncChanged);
-
-    try {
-      WidgetService.instance.initialize();
-    } catch (_) {}
-
-    _listenForWidgetClicks();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _checkInitialLaunch();
-      try {
-        NotificationService.navigateToPendingRoute();
-      } catch (_) {}
+      final shake = ref.read(shakeServiceProvider);
+      shake.onShake = () {
+        final router = ref.read(routerProvider);
+        router.go('/home');
+      };
+      shake.init().then((_) => shake.start());
     });
-  }
-
-  Future<void> _checkInitialLaunch() async {
-    try {
-      final uri = await HomeWidget.initiallyLaunchedFromHomeWidget();
-      _handleDeepLink(uri);
-    } catch (_) {}
-  }
-
-  void _listenForWidgetClicks() {
-    try {
-      final platform = defaultTargetPlatform;
-      if (platform != TargetPlatform.android && platform != TargetPlatform.iOS) return;
-      HomeWidget.widgetClicked.listen((Uri? uri) {
-        _handleDeepLink(uri);
-      }).onError((_) {});
-    } catch (_) {}
-  }
-
-  void _handleDeepLink(Uri? uri) {
-    if (uri == null) return;
-    final route = uri.toString();
-    final nav = navigatorKey.currentState;
-    if (nav == null) return;
-
-    if (route == 'timbo://quick_capture' || route == 'timbo://capture') {
-      final ctx = navigatorKey.currentContext;
-      if (ctx != null) QuickCapturePopup.show(ctx);
-    } else if (route == 'timbo://finance') {
-      nav.pushNamedAndRemoveUntil(AppRoutes.finance, (r) => r.settings.name == AppRoutes.home);
-    } else if (route == 'timbo://chat') {
-      nav.pushNamedAndRemoveUntil(AppRoutes.chat, (r) => r.settings.name == AppRoutes.home);
-    } else if (route == 'timbo://home' || route == 'timbo://') {
-      nav.pushNamedAndRemoveUntil(AppRoutes.home, (r) => false);
-    } else if (route == 'timbo://notes') {
-      nav.pushNamedAndRemoveUntil(AppRoutes.notes, (r) => r.settings.name == AppRoutes.home);
-    } else if (route == 'timbo://reminders') {
-      nav.pushNamedAndRemoveUntil(AppRoutes.reminders, (r) => r.settings.name == AppRoutes.home);
-    } else if (route == 'timbo://settings') {
-      nav.pushNamedAndRemoveUntil(AppRoutes.settings, (r) => r.settings.name == AppRoutes.home);
-    } else if (route == 'timbo://insights') {
-      nav.pushNamedAndRemoveUntil(AppRoutes.insights, (r) => r.settings.name == AppRoutes.home);
-    }
-  }
-
-  void _onSyncChanged() {
-    setState(() => _isOnline = SyncService.instance.isOnline);
   }
 
   @override
   void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
-    try {
-      ShakeService.instance.dispose();
-    } catch (_) {}
-    SyncService.instance.removeListener(_onSyncChanged);
+    ref.read(shakeServiceProvider).dispose();
+    _syncService?.dispose();
     super.dispose();
   }
 
   @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) {
-      try {
-        ShakeService.instance.startListening();
-      } catch (_) {}
-    } else if (state == AppLifecycleState.paused ||
-        state == AppLifecycleState.inactive) {
-      try {
-        ShakeService.instance.stopListening();
-      } catch (_) {}
-    }
-  }
-
-  @override
   Widget build(BuildContext context) {
-    return Consumer<UserProvider>(
-      builder: (context, userProvider, _) {
-        return Stack(
-          alignment: Alignment.topLeft,
-          clipBehavior: Clip.none,
-          children: [
-            MaterialApp(
-              navigatorKey: navigatorKey,
-              title: 'Timbo',
-              debugShowCheckedModeBanner: false,
-              theme: AppTheme.lightTheme,
-              darkTheme: AppTheme.darkTheme,
-              themeMode:
-                  userProvider.isDarkMode ? ThemeMode.dark : ThemeMode.light,
-              initialRoute: AppRoutes.splash,
-              onGenerateRoute: AppRoutes.onGenerateRoute,
-              builder: (context, child) {
-                return MediaQuery(
-                  data: MediaQuery.of(context).copyWith(
-                    textScaler: const TextScaler.linear(1.0),
-                  ),
-                  child: child!,
-                );
-              },
-            ),
-            Directionality(
-              textDirection: TextDirection.ltr,
-              child: AnimatedSlide(
-                offset: _isOnline ? const Offset(0, -1) : Offset.zero,
-                duration: const Duration(milliseconds: 350),
-                curve: Curves.easeInOut,
-                child: AnimatedOpacity(
-                  opacity: _isOnline ? 0.0 : 1.0,
-                  duration: const Duration(milliseconds: 350),
-                  child: Material(
-                    child: Container(
-                      padding: EdgeInsets.only(top: MediaQuery.of(context).padding.top, bottom: 6),
-                      color: Colors.orange.shade800,
-                      child: const Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(Icons.wifi_off_rounded, color: Colors.white, size: 16),
-                          SizedBox(width: 6),
-                          Text(
-                            'No internet connection',
-                            style: TextStyle(color: Colors.white, fontSize: 12),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ],
-        );
-      },
+    final isDark = ref.watch(themeModeProvider);
+    final router = ref.watch(routerProvider);
+    final online = ref.watch(isOnlineProvider);
+
+    if (online && _syncService == null) {
+      final db = ref.read(databaseProvider);
+      _syncService = SyncService(db);
+      _syncService!.initialize();
+    } else if (!online && _syncService != null) {
+      _syncService!.dispose();
+      _syncService = null;
+    }
+
+    return MaterialApp.router(
+      title: 'Timbo',
+      debugShowCheckedModeBanner: false,
+      theme: TimboTheme.light,
+      darkTheme: TimboTheme.dark,
+      themeMode: isDark ? ThemeMode.dark : ThemeMode.light,
+      routerConfig: router,
     );
   }
 }

@@ -3,19 +3,12 @@
 #
 
 list(APPEND FLUTTER_PLUGIN_LIST
-  audioplayers_windows
   cloud_firestore
   connectivity_plus
-  file_selector_windows
   firebase_auth
   firebase_core
-  firebase_remote_config
-  permission_handler_windows
   record_windows
-  rive_native
-  share_plus
-  speech_to_text_windows
-  url_launcher_windows
+  sqlite3_flutter_libs
 )
 
 list(APPEND FLUTTER_FFI_PLUGIN_LIST

@@ -1,134 +1,72 @@
-const { onRequest } = require('firebase-functions/v2/https');
+const { onCall } = require('firebase-functions/v2/https');
+const { defineSecret } = require('firebase-functions/params');
 const admin = require('firebase-admin');
-const { GoogleGenerativeAI } = require('@google/generative-ai');
 
 admin.initializeApp();
 
-// API key stays server-side — set via functions/.env file (deployed as env var)
-const getApiKey = () => {
-  const key = process.env.GEMINI_API_KEY;
-  if (!key) throw new Error('GEMINI_API_KEY env var not set. Add it to functions/.env and redeploy.');
-  return key;
-};
+const geminiApiKey = defineSecret('GEMINI_API_KEY');
 
-const rateLimitMap = new Map();
-const RATE_LIMIT = 30;
-const RATE_WINDOW_MS = 60_000;
-
-function checkRateLimit(uid) {
-  const now = Date.now();
-  const entry = rateLimitMap.get(uid);
-  if (!entry || now - entry.resetAt > RATE_WINDOW_MS) {
-    rateLimitMap.set(uid, { count: 1, resetAt: now + RATE_WINDOW_MS });
-    return true;
-  }
-  if (entry.count >= RATE_LIMIT) return false;
-  entry.count++;
-  return true;
-}
-
-async function verifyAuth(authHeader) {
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    throw new Error('Missing or invalid Authorization header');
-  }
-  const idToken = authHeader.slice(7);
-  const decoded = await admin.auth().verifyIdToken(idToken);
-  return decoded;
-}
-
-exports.geminiChat = onRequest(
-  { cors: true },
-  async (req, res) => {
-    if (req.method !== 'POST') {
-      res.status(405).json({ error: 'Method not allowed' });
-      return;
+exports.processCapture = onCall(
+  { secrets: [geminiApiKey], cors: true },
+  async (request) => {
+    const { rawInput } = request.data;
+    if (!rawInput || typeof rawInput !== 'string') {
+      throw new functions.https.HttpsError(
+        'invalid-argument', 'rawInput is required'
+      );
     }
 
-    let uid;
-    try {
-      const decoded = await verifyAuth(req.headers.authorization);
-      uid = decoded.uid;
-    } catch (_) {
-      res.status(401).json({ error: 'Unauthorized' });
-      return;
-    }
+    const { GoogleGenerativeAI } = require('@google/generative-ai');
+    const genAI = new GoogleGenerativeAI(geminiApiKey.value());
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
 
-    if (!checkRateLimit(uid)) {
-      res.status(429).json({ error: 'Rate limit exceeded. Try again later.' });
-      return;
-    }
+    const prompt = `
+      You are Timbo AI, a personal secretary.
+      The user said: "${rawInput}"
 
-    const { prompt, history, systemPrompt } = req.body || {};
-    if (!prompt || typeof prompt !== 'string') {
-      res.status(400).json({ error: 'Missing "prompt" field.' });
-      return;
-    }
+      Determine what this is and extract structured data.
+      Reply ONLY with valid JSON, no explanation, no markdown.
 
-    try {
-      const genAI = new GoogleGenerativeAI(getApiKey());
-      const model = genAI.getGenerativeModel({
-        model: 'gemini-2.0-flash',
-        systemInstruction: systemPrompt
-          ? { role: 'system', parts: [{ text: systemPrompt }] }
-          : undefined,
-      });
+      Format:
+      {
+        "type": "note" | "expense" | "reminder",
+        "content": "clean version of what they said",
+        "amount": null or number (for expenses),
+        "category": null or one of: Food, Transport, Entertainment, Health, Shopping, Other,
+        "scheduledAt": null or ISO 8601 datetime string (for reminders)
+      }
 
-      const chat = model.startChat({
-        history: (history || []).map((msg) => ({
-          role: msg.role,
-          parts: [{ text: msg.parts || msg.content }],
-        })),
-      });
+      Today is ${new Date().toISOString()}.
+      If unsure of type, default to "note".
+    `;
 
-      const result = await chat.sendMessage(prompt);
-      const text = result.response.text();
-      res.json({ reply: text });
-    } catch (err) {
-      console.error('Gemini API error:', err);
-      res.status(502).json({ error: 'AI service temporarily unavailable.' });
-    }
+    const result = await model.generateContent(prompt);
+    const text = result.response.text();
+    const json = JSON.parse(text.replace(/```json|```/g, '').trim());
+    return json;
   }
 );
 
-exports.geminiGenerate = onRequest(
-  { cors: true },
-  async (req, res) => {
-    if (req.method !== 'POST') {
-      res.status(405).json({ error: 'Method not allowed' });
-      return;
-    }
+exports.dailySummary = onCall(
+  { secrets: [geminiApiKey], cors: true },
+  async (request) => {
+    const { captures } = request.data;
 
-    try {
-      const decoded = await verifyAuth(req.headers.authorization);
-      if (!checkRateLimit(decoded.uid)) {
-        res.status(429).json({ error: 'Rate limit exceeded.' });
-        return;
-      }
-    } catch (_) {
-      res.status(401).json({ error: 'Unauthorized' });
-      return;
-    }
+    const { GoogleGenerativeAI } = require('@google/generative-ai');
+    const genAI = new GoogleGenerativeAI(geminiApiKey.value());
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
 
-    const { prompt, systemPrompt } = req.body || {};
-    if (!prompt) {
-      res.status(400).json({ error: 'Missing "prompt".' });
-      return;
-    }
+    const prompt = `
+      You are Timbo AI. Given the user's captures for today, generate a single
+      friendly sentence summarizing their activity.
 
-    try {
-      const genAI = new GoogleGenerativeAI(getApiKey());
-      const model = genAI.getGenerativeModel({
-        model: 'gemini-2.0-flash',
-        systemInstruction: systemPrompt
-          ? { role: 'system', parts: [{ text: systemPrompt }] }
-          : undefined,
-      });
+      Captures: ${JSON.stringify(captures || [])}
 
-      const result = await model.generateContent(prompt);
-      res.json({ text: result.response.text() });
-    } catch (err) {
-      console.error('Gemini generate error:', err);
-      res.status(502).json({ error: 'AI service unavailable.' });
-    }
+      Reply with one sentence only. No markdown. No JSON.
+      Example: "You've captured 3 thoughts today. 1 reminder coming up at 6pm."
+    `;
+
+    const result = await model.generateContent(prompt);
+    return { summary: result.response.text() };
   }
 );

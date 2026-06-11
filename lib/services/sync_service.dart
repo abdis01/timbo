@@ -1,226 +1,40 @@
 import 'dart:async';
-import 'package:flutter/foundation.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import '../models/note_model.dart';
-import '../models/expense_model.dart';
-import '../models/reminder_model.dart';
-import '../models/quick_capture_model.dart';
-import 'firebase_service.dart';
-import 'hive_service.dart';
-enum SyncStatus { idle, syncing, offline, error }
+import 'package:connectivity_plus/connectivity_plus.dart';
+import '../database/database.dart';
+import 'capture_service.dart';
 
-class SyncService extends ChangeNotifier {
-  SyncService._();
-
-  static final SyncService _instance = SyncService._();
-  static SyncService get instance => _instance;
-
-  SyncStatus _status = SyncStatus.idle;
-  SyncStatus get status => _status;
-  
-  String _statusMessage = '';
-  String get statusMessage => _statusMessage;
-  
-  DateTime? _lastSyncTime;
-  DateTime? get lastSyncTime => _lastSyncTime;
-  
-  Timer? _autoSyncTimer;
-  StreamSubscription<bool>? _connectivitySub;
+class SyncService {
+  final TimboDatabase _db;
+  StreamSubscription<List<ConnectivityResult>>? _sub;
+  final _onlineController = StreamController<bool>.broadcast();
   bool _isOnline = true;
+
+  Stream<bool> get onOnlineChanged => _onlineController.stream;
   bool get isOnline => _isOnline;
 
-  Future<void> initialize() async {
-    try {
-      if (!FirebaseService.instance.isAvailable) return;
-      final userId = FirebaseService.instance.currentUser?.uid;
-      if (userId != null) {
-        _lastSyncTime = await FirebaseService.instance.getLastSyncTime(userId);
+  SyncService(this._db);
+
+  void initialize() {
+    _sub = Connectivity().onConnectivityChanged.listen((results) {
+      final online = !results.contains(ConnectivityResult.none);
+      if (online && !_isOnline) {
+        _isOnline = true;
+        _onlineController.add(true);
+        _syncPending();
+      } else if (!online) {
+        _isOnline = false;
+        _onlineController.add(false);
       }
-
-      _connectivitySub = FirebaseService.instance.onConnectivityChanged.listen((online) {
-        _isOnline = online;
-        if (online) {
-          _setStatus(SyncStatus.idle, 'Connected');
-          _attemptPendingSync();
-        } else {
-          _setStatus(SyncStatus.offline, 'Offline — changes saved locally');
-        }
-      });
-
-      _isOnline = await FirebaseService.instance.isConnected();
-    } catch (_) {
-      _isOnline = false;
-    }
-    if (!_isOnline) {
-      _setStatus(SyncStatus.offline, 'Offline — changes saved locally');
-    }
-
-    _autoSyncTimer = Timer.periodic(const Duration(minutes: 30), (_) {
-      _autoSync();
     });
   }
 
-  Future<void> _autoSync() async {
-    final user = HiveService.instance.getUser();
-    if (user == null) return;
-    if (!user.cloudSyncEnabled || !user.isPremium || !_isOnline) return;
-    await performSync();
+  Future<void> _syncPending() async {
+    final service = CaptureService(_db);
+    await service.processPendingCaptures();
   }
 
-  Future<void> _attemptPendingSync() async {
-    final user = HiveService.instance.getUser();
-    if (user == null) return;
-    if (!user.cloudSyncEnabled || !user.isPremium) return;
-    await performSync();
-  }
-
-  Future<void> performSync() async {
-    final user = HiveService.instance.getUser();
-    if (user == null) return;
-    if (!FirebaseService.instance.isAvailable) return;
-    final userId = FirebaseService.instance.currentUser?.uid;
-    if (userId == null) return;
-    
-    _setStatus(SyncStatus.syncing, 'Syncing...');
-    notifyListeners();
-    
-    try {
-      final notes = HiveService.instance.getAllNotes();
-      final expenses = HiveService.instance.getAllExpenses();
-      final reminders = HiveService.instance.getAllReminders();
-      final captures = HiveService.instance.getAllCaptures();
-
-      final localNoteIds = notes.map((n) => n.id).toSet();
-      final localExpenseIds = expenses.map((e) => e.id).toSet();
-      final localReminderIds = reminders.map((r) => r.id).toSet();
-      final localCaptureIds = captures.map((c) => c.id).toSet();
-      
-      if (_lastSyncTime == null) {
-        await FirebaseService.instance.fullSync(userId, 
-          notes: notes, expenses: expenses, reminders: reminders, captures: captures);
-      } else {
-        await FirebaseService.instance.incrementalSync(userId, _lastSyncTime!,
-          notes: notes, expenses: expenses, reminders: reminders, captures: captures);
-        
-        final cloudData = await FirebaseService.instance.downloadFromCloud(userId);
-        await _mergeCloudData(cloudData, notes, expenses, reminders, captures);
-
-        final cloudNoteIds = cloudData.notes.map((n) => n.id).toSet();
-        final cloudExpenseIds = cloudData.expenses.map((e) => e.id).toSet();
-        final cloudReminderIds = cloudData.reminders.map((r) => r.id).toSet();
-        final cloudCaptureIds = cloudData.captures.map((c) => c.id).toSet();
-
-        for (final note in cloudData.notes) {
-          if (!localNoteIds.contains(note.id)) {
-            await FirebaseService.instance.deleteNote(userId, note.id);
-          }
-        }
-        for (final expense in cloudData.expenses) {
-          if (!localExpenseIds.contains(expense.id)) {
-            await FirebaseService.instance.deleteExpense(userId, expense.id);
-          }
-        }
-        for (final reminder in cloudData.reminders) {
-          if (!localReminderIds.contains(reminder.id)) {
-            await FirebaseService.instance.deleteReminder(userId, reminder.id);
-          }
-        }
-        for (final capture in cloudData.captures) {
-          if (!localCaptureIds.contains(capture.id)) {
-            await FirebaseService.instance.deleteCapture(userId, capture.id);
-          }
-        }
-
-        for (final note in notes) {
-          if (!cloudNoteIds.contains(note.id)) {
-            await HiveService.instance.deleteNote(note.id);
-          }
-        }
-        for (final expense in expenses) {
-          if (!cloudExpenseIds.contains(expense.id)) {
-            await HiveService.instance.deleteExpense(expense.id);
-          }
-        }
-        for (final reminder in reminders) {
-          if (!cloudReminderIds.contains(reminder.id)) {
-            await HiveService.instance.deleteReminder(reminder.id);
-          }
-        }
-        for (final capture in captures) {
-          if (!cloudCaptureIds.contains(capture.id)) {
-            await HiveService.instance.deleteCapture(capture.id);
-          }
-        }
-      }
-      
-      _lastSyncTime = DateTime.now();
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('last_sync_time_$userId', _lastSyncTime!.toIso8601String());
-      
-      _setStatus(SyncStatus.idle, _formatLastSync());
-    } catch (e) {
-      _setStatus(SyncStatus.error, 'Sync failed. Will retry.');
-    }
-    notifyListeners();
-  }
-
-  Future<void> _mergeCloudData(
-    SyncCloudData cloudData,
-    List<NoteModel> localNotes,
-    List<ExpenseModel> localExpenses,
-    List<ReminderModel> localReminders,
-    List<QuickCaptureModel> localCaptures,
-  ) async {
-    for (final cloudNote in cloudData.notes) {
-      final localNote = localNotes.where((n) => n.id == cloudNote.id).firstOrNull;
-      if (localNote == null || cloudNote.updatedAt.isAfter(localNote.updatedAt)) {
-        await HiveService.instance.saveNote(cloudNote);
-      }
-    }
-    for (final cloudExpense in cloudData.expenses) {
-      final local = localExpenses.where((e) => e.id == cloudExpense.id).firstOrNull;
-      if (local == null || cloudExpense.updatedAt.isAfter(local.updatedAt)) {
-        await HiveService.instance.saveExpense(cloudExpense);
-      }
-    }
-    for (final cloudReminder in cloudData.reminders) {
-      final local = localReminders.where((r) => r.id == cloudReminder.id).firstOrNull;
-      if (local == null || cloudReminder.updatedAt.isAfter(local.updatedAt)) {
-        await HiveService.instance.saveReminder(cloudReminder);
-      }
-    }
-    for (final cloudCapture in cloudData.captures) {
-      final local = localCaptures.where((c) => c.id == cloudCapture.id).firstOrNull;
-      if (local == null || cloudCapture.updatedAt.isAfter(local.updatedAt)) {
-        await HiveService.instance.saveCapture(cloudCapture);
-      }
-    }
-  }
-
-  void _setStatus(SyncStatus newStatus, String message) {
-    _status = newStatus;
-    _statusMessage = message;
-    notifyListeners();
-  }
-
-  String _formatLastSync() {
-    if (_lastSyncTime == null) return '';
-    final diff = DateTime.now().difference(_lastSyncTime!);
-    if (diff.inSeconds < 60) return 'Just now';
-    if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
-    if (diff.inHours < 24) return '${diff.inHours}h ago';
-    return '${diff.inDays}d ago';
-  }
-
-  String get formattedLastSync {
-    if (_lastSyncTime == null) return 'Never';
-    return _formatLastSync();
-  }
-
-  @override
   void dispose() {
-    _autoSyncTimer?.cancel();
-    _connectivitySub?.cancel();
-    super.dispose();
+    _sub?.cancel();
+    _onlineController.close();
   }
 }
