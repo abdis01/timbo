@@ -9,7 +9,7 @@ plugins {
 
 android {
     namespace = "com.timbo.timbo_app"
-    compileSdk = flutter.compileSdkVersion
+    compileSdk = 35
     ndkVersion = "28.2.13676358"
 
     compileOptions {
@@ -19,14 +19,11 @@ android {
     }
 
     defaultConfig {
-        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
         applicationId = "com.timbo.timbo_app"
-        // You can update the following values to match your application needs.
-        // For more information, see: https://flutter.dev/to/review-gradle-config.
-        minSdk = flutter.minSdkVersion
-        targetSdk = flutter.targetSdkVersion
-        versionCode = flutter.versionCode
-        versionName = flutter.versionName
+        minSdk = 26
+        targetSdk = 35
+        versionCode = 1
+        versionName = "1.0.0"
     }
 
     dependencies {
@@ -35,16 +32,27 @@ android {
 
     signingConfigs {
         create("release") {
-            keyAlias = "timbo_key"
-            keyPassword = "timboRelease2024"
-            storeFile = file("keystore.jks")
-            storePassword = "timboRelease2024"
+            val keystorePropertiesFile = rootProject.file("../key.properties")
+            val keystoreProperties = java.util.Properties()
+            if (keystorePropertiesFile.exists()) {
+                keystoreProperties.load(keystorePropertiesFile.inputStream())
+            }
+            keyAlias = keystoreProperties.getProperty("keyAlias") ?: "timbo_key"
+            keyPassword = keystoreProperties.getProperty("keyPassword") ?: ""
+            storeFile = file(keystoreProperties.getProperty("storeFile", "keystore.jks"))
+            storePassword = keystoreProperties.getProperty("storePassword") ?: ""
         }
     }
 
     buildTypes {
         release {
             signingConfig = signingConfigs.getByName("release")
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
         }
     }
 }

@@ -3,8 +3,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:firebase_auth/firebase_auth.dart' as auth;
 import '../database/database.dart';
-import '../services/capture_service.dart';
 import '../services/sync_service.dart';
+import '../services/preferences_service.dart';
 
 final databaseProvider = Provider<TimboDatabase>((ref) => TimboDatabase());
 
@@ -29,62 +29,15 @@ final currentUserProvider = Provider<auth.User?>((ref) {
   return ref.watch(authStateProvider).valueOrNull;
 });
 
-final hasSeenOnboardingProvider = FutureProvider<bool>((ref) async {
+final hasCompletedOnboardingProvider = FutureProvider<bool>((ref) async {
   final prefs = await ref.watch(sharedPrefsProvider.future);
-  return prefs.getBool('hasSeenOnboarding') ?? false;
+  return prefs.getBool('hasCompletedOnboarding') ?? false;
 });
-
-final capturesProvider = StreamProvider<List<Capture>>((ref) {
-  final db = ref.watch(databaseProvider);
-  return db.watchAllCaptures();
-});
-
-final filteredCapturesProvider = Provider.family<AsyncValue<List<Capture>>, String>((ref, filter) {
-  final all = ref.watch(capturesProvider);
-  return all.whenData((list) {
-    if (filter == 'all') return list;
-    return list.where((c) => c.type == filter).toList();
-  });
-});
-
-final todayRemindersProvider = FutureProvider<List<Capture>>((ref) async {
-  final db = ref.watch(databaseProvider);
-  return db.getTodayReminders();
-});
-
-final todayCaptureCountProvider = FutureProvider<int>((ref) async {
-  final db = ref.watch(databaseProvider);
-  return db.getTodayCaptureCount();
-});
-
-final recentCapturesProvider = FutureProvider<List<Capture>>((ref) async {
-  final db = ref.watch(databaseProvider);
-  return db.getRecentCaptures();
-});
-
-final dailySummaryProvider = FutureProvider<String>((ref) async {
-  final db = ref.watch(databaseProvider);
-  final count = await db.getTodayCaptureCount();
-  final reminders = await db.getTodayReminders();
-  if (count == 0) return 'Ready when you are. Start capturing below.';
-  final reminderText = reminders.isNotEmpty
-      ? '${reminders.length} reminder${reminders.length > 1 ? 's' : ''} coming up.'
-      : 'No reminders today.';
-  return "You've captured $count thought${count > 1 ? 's' : ''} today. $reminderText";
-});
-
-final captureTypeProvider = StateProvider<String?>((ref) => null);
 
 final isRecordingProvider = StateProvider<bool>((ref) => false);
 
-final captureServiceProvider = Provider<CaptureService>((ref) {
-  final db = ref.watch(databaseProvider);
-  return CaptureService(db);
-});
-
 final syncServiceProvider = Provider<SyncService>((ref) {
-  final db = ref.watch(databaseProvider);
-  return SyncService(db);
+  return SyncService();
 });
 
 final userGreetingProvider = Provider<String>((ref) {
@@ -111,4 +64,11 @@ final userNameProvider = Provider<String>((ref) {
   return user?.displayName ?? user?.email?.split('@').first ?? 'Friend';
 });
 
-final themeModeProvider = StateProvider<bool>((ref) => false);
+final preferencesServiceProvider = Provider<PreferencesService>((ref) {
+  throw Exception('PreferencesService not initialized — override in ProviderScope');
+});
+
+final themeModeProvider = StateProvider<bool>((ref) {
+  final prefs = ref.watch(preferencesServiceProvider);
+  return prefs.darkMode;
+});

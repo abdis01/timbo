@@ -3,8 +3,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:timezone/data/latest.dart' as tz_data;
 import 'firebase_options.dart';
 import 'app.dart';
+import 'services/reminder_service.dart';
+import 'services/preferences_service.dart';
+import 'providers/providers.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -26,8 +31,17 @@ void main() async {
     };
   }
 
+  tz_data.initializeTimeZones();
+  await ReminderService().initialize();
+
+  final prefs = await SharedPreferences.getInstance();
+  final prefsService = PreferencesService(prefs);
+
   runApp(
-    const ProviderScope(
+    ProviderScope(
+      overrides: [
+        preferencesServiceProvider.overrideWithValue(prefsService),
+      ],
       child: CrashGuard(child: TimboApp()),
     ),
   );

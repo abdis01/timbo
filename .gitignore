@@ -46,8 +46,8 @@ app.*.map.json
 /android/build/
 
 # Secrets — never commit API keys
-/lib/config/secrets.dart
-
-# Payment API keys
-/lib/config/payment_config.dart
-/lib/config/flutterwave_config.dart
+android/key.properties
+lib/config/secrets.dart
+lib/config/payment_config.dart
+lib/config/flutterwave_config.dart
+android/app/keystore.jks

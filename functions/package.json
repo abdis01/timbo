@@ -1,12 +1,13 @@
 {
   "name": "timbo-gemini-proxy",
-  "description": "Cloud Function proxy for Gemini API — keeps the API key server-side",
+  "description": "Cloud Function proxy for Gemini + Groq APIs",
   "version": "1.0.0",
   "main": "index.js",
   "dependencies": {
     "firebase-admin": "^12.0.0",
     "firebase-functions": "^5.0.0",
-    "@google/generative-ai": "^0.21.0"
+    "@google/generative-ai": "^0.21.0",
+    "groq-sdk": "^0.9.0"
   },
   "private": true
 }

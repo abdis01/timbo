@@ -3,7 +3,6 @@ import 'package:drift/drift.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:http/http.dart' as http;
 import '../database/database.dart';
-import '../database/captures_table.dart';
 
 class CaptureService {
   final TimboDatabase _db;

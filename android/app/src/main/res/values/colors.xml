@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="ic_launcher_background">#1F2937</color>
-    <color name="timbo_green">#FF149E53</color>
+    <color name="ic_launcher_background">#F5F0E8</color>
+    <color name="timbo_green">#F5F0E8</color>
+    <color name="warm_paper">#F5F0E8</color>
 </resources>
