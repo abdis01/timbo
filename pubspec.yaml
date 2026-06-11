@@ -37,6 +37,7 @@ dependencies:
   image_picker: ^1.1.2
   just_audio: ^0.9.40
   speech_to_text: ^7.0.0
+  home_widget: ^0.7.0
 
 dev_dependencies:
   flutter_test:
