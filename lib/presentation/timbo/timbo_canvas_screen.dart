@@ -12,7 +12,6 @@ import '../../domain/block.dart';
 import '../../domain/timbo.dart';
 import '../../providers/timbos_provider.dart';
 import '../../providers/blocks_provider.dart';
-import '../../providers/providers.dart';
 import '../../theme/colors.dart';
 import '../../theme/typography.dart';
 import 'widgets/text_block.dart';

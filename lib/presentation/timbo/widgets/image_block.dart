@@ -7,7 +7,6 @@ class ImageBlock extends StatefulWidget {
   final String filePath;
   final String? caption;
   final VoidCallback? onDelete;
-  final void Function(double width, double height)? onResize;
   final bool readOnly;
 
   const ImageBlock({
@@ -16,7 +15,6 @@ class ImageBlock extends StatefulWidget {
     required this.filePath,
     this.caption,
     this.onDelete,
-    this.onResize,
     this.readOnly = false,
   });
 
@@ -24,30 +22,7 @@ class ImageBlock extends StatefulWidget {
   State<ImageBlock> createState() => _ImageBlockState();
 }
 
-class _ImageBlockState extends State<ImageBlock> with SingleTickerProviderStateMixin {
-  late final AnimationController _controller;
-  late final Animation<double> _scaleAnim;
-  double _width = 200;
-  double _height = 160;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 100),
-    );
-    _scaleAnim = Tween<double>(begin: 1.0, end: 0.97).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeOut),
-    );
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
+class _ImageBlockState extends State<ImageBlock> {
   void _showFullScreen(BuildContext context) {
     Navigator.of(context).push(
       MaterialPageRoute(
@@ -81,25 +56,11 @@ class _ImageBlockState extends State<ImageBlock> with SingleTickerProviderStateM
     if (confirmed == true) widget.onDelete?.call();
   }
 
-  void _onResizeUpdate(double deltaW, double deltaH) {
-    setState(() {
-      _width = (_width + deltaW).clamp(80, 600);
-      _height = (_height + deltaH).clamp(80, 600);
-    });
-    widget.onResize?.call(_width, _height);
-  }
-
   @override
   Widget build(BuildContext context) {
-    final isInteractive = !widget.readOnly;
     return GestureDetector(
-      onTapDown: isInteractive ? (_) => _controller.forward() : null,
-      onTapUp: isInteractive ? (_) {
-        _controller.reverse();
-        _showFullScreen(context);
-      } : null,
-      onTapCancel: isInteractive ? () => _controller.reverse() : null,
-      onLongPress: isInteractive ? () => _showDeleteDialog(context) : null,
+      onTap: () => _showFullScreen(context),
+      onLongPress: !widget.readOnly ? () => _showDeleteDialog(context) : null,
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
         child: ClipRRect(

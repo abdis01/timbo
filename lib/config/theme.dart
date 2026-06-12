@@ -14,5 +14,4 @@ class _TimboColors {
 
 class _TimboTheme {
   ThemeData get light => new_theme.timboLightTheme;
-  ThemeData get dark => new_theme.timboDarkTheme;
 }

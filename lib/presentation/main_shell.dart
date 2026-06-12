@@ -12,8 +12,6 @@ class MainShell extends ConsumerStatefulWidget {
 }
 
 class _MainShellState extends ConsumerState<MainShell> {
-  int _currentIndex = 0;
-
   @override
   Widget build(BuildContext context) {
     final location = GoRouterState.of(context).uri.toString();
