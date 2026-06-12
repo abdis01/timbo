@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:record/record.dart';
 import 'package:uuid/uuid.dart';
 import '../../core/widgets/offline_banner.dart';
@@ -107,18 +108,43 @@ class _TimboCanvasScreenState extends ConsumerState<TimboCanvasScreen> {
   }
 
   Future<void> _startRecording() async {
-    final dir = await getTemporaryDirectory();
+    final micStatus = await Permission.microphone.request();
+    if (!micStatus.isGranted) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: const Text('Microphone permission is required to record'), behavior: SnackBarBehavior.floating),
+        );
+      }
+      return;
+    }
+    final dir = await getApplicationDocumentsDirectory();
     final path = '${dir.path}/voice_${DateTime.now().millisecondsSinceEpoch}.m4a';
-    await _recorder.start(const RecordConfig(), path: path);
-    setState(() { _isRecording = true; _recordingPath = path; });
+    try {
+      await _recorder.start(const RecordConfig(), path: path);
+      setState(() { _isRecording = true; _recordingPath = path; });
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to start recording: $e'), behavior: SnackBarBehavior.floating),
+        );
+      }
+    }
   }
 
   Future<void> _stopRecording() async {
     if (!_isRecording || _recordingPath == null) return;
     try {
-      await _recorder.stop();
-      await ref.read(blockRepositoryProvider).addVoiceBlock(widget.timboId, _recordingPath!);
-    } catch (_) {}
+      final path = await _recorder.stop();
+      if (path != null) {
+        await ref.read(blockRepositoryProvider).addVoiceBlock(widget.timboId, path);
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to save recording: $e'), behavior: SnackBarBehavior.floating),
+        );
+      }
+    }
     setState(() { _isRecording = false; _recordingPath = null; });
   }
 

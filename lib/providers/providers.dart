@@ -68,4 +68,9 @@ final preferencesServiceProvider = Provider<PreferencesService>((ref) {
   throw Exception('PreferencesService not initialized — override in ProviderScope');
 });
 
+final userFontFamilyProvider = Provider<String>((ref) {
+  final prefs = ref.watch(preferencesServiceProvider);
+  return prefs.defaultFont;
+});
+
 

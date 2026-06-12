@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:timezone/data/latest.dart' as tz_data;
 import 'firebase_options.dart';
@@ -33,6 +34,10 @@ void main() async {
 
   tz_data.initializeTimeZones();
   await ReminderService().initialize();
+
+  if (await Permission.notification.isGranted == false) {
+    await Permission.notification.request();
+  }
 
   final prefs = await SharedPreferences.getInstance();
   final prefsService = PreferencesService(prefs);

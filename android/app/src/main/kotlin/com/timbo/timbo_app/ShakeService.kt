@@ -26,13 +26,13 @@ class ShakeService : Service(), SensorEventListener {
     }
 
     private var sensorManager: SensorManager? = null
-    private var lastShakeTime: Long = 0
+    private var lastShakeTime = 0L
     private var wakeLock: PowerManager.WakeLock? = null
+    private var isDestroyed = false
 
     override fun onCreate() {
         super.onCreate()
         createNotificationChannel()
-        acquireWakeLock()
         sensorManager = getSystemService(SENSOR_SERVICE) as SensorManager
         startForeground(NOTIFICATION_ID, buildNotification())
         sensorManager?.registerListener(
@@ -43,7 +43,27 @@ class ShakeService : Service(), SensorEventListener {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        if (isDestroyed) {
+            sensorManager?.registerListener(
+                this,
+                sensorManager?.getDefaultSensor(Sensor.TYPE_ACCELEROMETER),
+                SensorManager.SENSOR_DELAY_NORMAL
+            )
+            startForeground(NOTIFICATION_ID, buildNotification())
+            isDestroyed = false
+        }
         return START_STICKY
+    }
+
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        val restartIntent = Intent(applicationContext, ShakeService::class.java)
+        val pendingIntent = android.app.PendingIntent.getService(
+            applicationContext, 0, restartIntent,
+            android.app.PendingIntent.FLAG_ONE_SHOT or android.app.PendingIntent.FLAG_IMMUTABLE
+        )
+        val alarmManager = getSystemService(Context.ALARM_SERVICE) as android.app.AlarmManager
+        alarmManager.set(android.app.AlarmManager.RTC, System.currentTimeMillis() + 100, pendingIntent)
+        super.onTaskRemoved(rootIntent)
     }
 
     override fun onSensorChanged(event: SensorEvent) {
@@ -95,17 +115,8 @@ class ShakeService : Service(), SensorEventListener {
             .build()
     }
 
-    private fun acquireWakeLock() {
-        val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
-        wakeLock = powerManager.newWakeLock(
-            PowerManager.PARTIAL_WAKE_LOCK,
-            "Timbo:ShakeWakeLock"
-        ).apply {
-            acquire(10 * 60 * 1000L)
-        }
-    }
-
     override fun onDestroy() {
+        isDestroyed = true
         sensorManager?.unregisterListener(this)
         wakeLock?.let {
             if (it.isHeld) it.release()

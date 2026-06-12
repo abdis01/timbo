@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'providers/providers.dart';
 import 'providers/folders_provider.dart';
 import 'providers/timbos_provider.dart';
@@ -173,12 +174,21 @@ class _TimboAppState extends ConsumerState<TimboApp> {
       }
     });
 
+    final font = ref.watch(userFontFamilyProvider);
     final router = ref.watch(routerProvider);
+
+    final theme = timboLightTheme.copyWith(
+      textTheme: GoogleFonts.getFont(font).textTheme.copyWith(
+        bodyLarge: GoogleFonts.getFont(font, fontSize: 15, fontWeight: FontWeight.w400),
+        bodyMedium: GoogleFonts.getFont(font, fontSize: 14, fontWeight: FontWeight.w400),
+        bodySmall: GoogleFonts.getFont(font, fontSize: 13, fontWeight: FontWeight.w400),
+      ),
+    );
 
     return MaterialApp.router(
       title: 'Timbo',
       debugShowCheckedModeBanner: false,
-      theme: timboLightTheme,
+      theme: theme,
       themeMode: ThemeMode.light,
       routerConfig: router,
     );
