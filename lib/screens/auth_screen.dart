@@ -76,10 +76,6 @@ class _AuthScreenState extends ConsumerState<AuthScreen>
     try {
       final googleSignIn = GoogleSignIn.instance;
       final account = await googleSignIn.authenticate().timeout(const Duration(seconds: 30));
-      if (account == null) {
-        if (mounted) setState(() => _isLoading = false);
-        return;
-      }
       final authz = account.authentication;
       if (authz.idToken == null) {
         _showError('Google sign-in failed: missing authentication token.');
