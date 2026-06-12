@@ -6,7 +6,7 @@ import 'package:go_router/go_router.dart';
 import 'providers/providers.dart';
 import 'providers/folders_provider.dart';
 import 'providers/timbos_provider.dart';
-import 'config/theme.dart';
+import 'theme/theme.dart';
 import 'screens/profile_screen.dart';
 import 'screens/auth_screen.dart';
 import 'presentation/splash/splash_screen.dart';
@@ -16,10 +16,12 @@ import 'presentation/home/folder_detail_screen.dart';
 import 'presentation/timbo/timbo_canvas_screen.dart';
 import 'presentation/ai_chat/ai_chat_screen.dart';
 import 'presentation/search/search_screen.dart';
+import 'presentation/main_shell.dart';
 import 'services/sync_service.dart';
 import 'services/shake_service.dart';
 
 final _rootNavigatorKey = GlobalKey<NavigatorState>();
+final _shellNavigatorKey = GlobalKey<NavigatorState>();
 
 Widget _slideUpTransition(Widget child, Animation<double> animation) {
   return SlideTransition(
@@ -36,9 +38,6 @@ final routerProvider = Provider<GoRouter>((ref) {
     navigatorKey: _rootNavigatorKey,
     initialLocation: '/splash',
     debugLogDiagnostics: false,
-    redirect: (context, state) {
-      return null;
-    },
     routes: [
       GoRoute(
         path: '/splash',
@@ -64,12 +63,31 @@ final routerProvider = Provider<GoRouter>((ref) {
           transitionDuration: const Duration(milliseconds: 300),
         ),
       ),
-      GoRoute(
-        path: '/home',
-        pageBuilder: (_, __) => const NoTransitionPage(child: HomeScreen()),
+      ShellRoute(
+        navigatorKey: _shellNavigatorKey,
+        builder: (_, __, child) => MainShell(child: child),
+        routes: [
+          GoRoute(
+            path: '/home',
+            pageBuilder: (_, __) => const NoTransitionPage(child: HomeScreen()),
+          ),
+          GoRoute(
+            path: '/search',
+            pageBuilder: (_, __) => const NoTransitionPage(child: SearchScreen()),
+          ),
+          GoRoute(
+            path: '/ai-chat',
+            pageBuilder: (_, __) => const NoTransitionPage(child: AiChatScreen()),
+          ),
+          GoRoute(
+            path: '/profile',
+            pageBuilder: (_, __) => const NoTransitionPage(child: ProfileScreen()),
+          ),
+        ],
       ),
       GoRoute(
         path: '/folder/:id',
+        parentNavigatorKey: _rootNavigatorKey,
         pageBuilder: (_, state) => CustomTransitionPage(
           child: FolderDetailScreen(
             folderId: int.parse(state.pathParameters['id']!),
@@ -80,34 +98,11 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: '/timbo/:id',
+        parentNavigatorKey: _rootNavigatorKey,
         pageBuilder: (_, state) => CustomTransitionPage(
           child: TimboCanvasScreen(
             timboId: int.parse(state.pathParameters['id']!),
           ),
-          transitionsBuilder: (_, a, __, c) => _slideUpTransition(c, a),
-          transitionDuration: const Duration(milliseconds: 300),
-        ),
-      ),
-      GoRoute(
-        path: '/ai-chat',
-        pageBuilder: (_, __) => CustomTransitionPage(
-          child: const AiChatScreen(),
-          transitionsBuilder: (_, a, __, c) => _slideUpTransition(c, a),
-          transitionDuration: const Duration(milliseconds: 300),
-        ),
-      ),
-      GoRoute(
-        path: '/search',
-        pageBuilder: (_, __) => CustomTransitionPage(
-          child: const SearchScreen(),
-          transitionsBuilder: (_, a, __, c) => _slideUpTransition(c, a),
-          transitionDuration: const Duration(milliseconds: 300),
-        ),
-      ),
-      GoRoute(
-        path: '/profile',
-        pageBuilder: (_, __) => CustomTransitionPage(
-          child: const ProfileScreen(),
           transitionsBuilder: (_, a, __, c) => _slideUpTransition(c, a),
           transitionDuration: const Duration(milliseconds: 300),
         ),
@@ -178,15 +173,13 @@ class _TimboAppState extends ConsumerState<TimboApp> {
       }
     });
 
-    final isDark = ref.watch(themeModeProvider);
     final router = ref.watch(routerProvider);
 
     return MaterialApp.router(
       title: 'Timbo',
       debugShowCheckedModeBanner: false,
-      theme: TimboTheme.light,
-      darkTheme: TimboTheme.dark,
-      themeMode: isDark ? ThemeMode.dark : ThemeMode.light,
+      theme: timboLightTheme,
+      themeMode: ThemeMode.light,
       routerConfig: router,
     );
   }

@@ -68,7 +68,4 @@ final preferencesServiceProvider = Provider<PreferencesService>((ref) {
   throw Exception('PreferencesService not initialized — override in ProviderScope');
 });
 
-final themeModeProvider = StateProvider<bool>((ref) {
-  final prefs = ref.watch(preferencesServiceProvider);
-  return prefs.darkMode;
-});
+

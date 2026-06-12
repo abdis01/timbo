@@ -46,20 +46,3 @@ ThemeData timboLightTheme = ThemeData(
     ),
   ),
 );
-
-ThemeData timboDarkTheme = timboLightTheme.copyWith(
-  brightness: Brightness.dark,
-  scaffoldBackgroundColor: TimboColors.darkBackground,
-  colorScheme: const ColorScheme.dark(
-    primary: TimboColors.darkText,
-    surface: TimboColors.darkSurface,
-    onPrimary: TimboColors.darkBackground,
-    onSurface: TimboColors.darkText,
-  ),
-  appBarTheme: const AppBarTheme(
-    backgroundColor: TimboColors.darkBackground,
-    elevation: 0,
-    scrolledUnderElevation: 0,
-    foregroundColor: TimboColors.darkText,
-  ),
-);

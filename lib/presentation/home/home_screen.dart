@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import '../../core/widgets/timbo_app_bar.dart';
 import '../../core/widgets/offline_banner.dart';
 import '../../providers/folders_provider.dart';
 import '../../providers/ai_provider.dart';
 import '../../providers/timbos_provider.dart';
+import '../../providers/providers.dart';
 import '../../theme/colors.dart';
 import 'widgets/folder_card.dart';
 import 'widgets/ai_insight_card.dart';
@@ -47,13 +47,28 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
   Widget build(BuildContext context) {
     final folders = ref.watch(foldersProvider);
     final insight = ref.watch(aiInsightProvider);
+    final greeting = ref.watch(userGreetingProvider);
+    final userName = ref.watch(userNameProvider);
+    final date = ref.watch(formattedDateProvider);
 
     return Scaffold(
-      appBar: TimboAppBar(),
       backgroundColor: TimboColors.appBackground,
       body: CustomScrollView(
         slivers: [
-          const SliverToBoxAdapter(child: OfflineBanner()),
+          SliverToBoxAdapter(child: OfflineBanner()),
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('$greeting, $userName', style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w700, color: TimboColors.ink)),
+                  const SizedBox(height: 2),
+                  Text(date, style: const TextStyle(fontSize: 13, color: TimboColors.inkLight)),
+                ],
+              ),
+            ),
+          ),
           const SliverToBoxAdapter(child: SizedBox(height: 16)),
           SliverToBoxAdapter(
             child: Padding(

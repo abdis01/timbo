@@ -8,7 +8,6 @@ class PreferencesService {
   static const _shake = 'setting_shake';
   static const _notifications = 'setting_notifications';
   static const _lines = 'setting_lines';
-  static const _darkMode = 'setting_dark_mode';
   static const _defaultFont = 'setting_default_font';
   static const _avatarPath = 'setting_avatar_path';
 
@@ -20,9 +19,6 @@ class PreferencesService {
 
   bool get linesEnabled => _prefs.getBool(_lines) ?? true;
   set linesEnabled(bool v) => _prefs.setBool(_lines, v);
-
-  bool get darkMode => _prefs.getBool(_darkMode) ?? false;
-  set darkMode(bool v) => _prefs.setBool(_darkMode, v);
 
   String get defaultFont => _prefs.getString(_defaultFont) ?? 'Inter';
   set defaultFont(String v) => _prefs.setString(_defaultFont, v);

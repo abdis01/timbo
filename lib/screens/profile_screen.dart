@@ -104,7 +104,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   Widget build(BuildContext context) {
     final user = ref.watch(currentUserProvider);
     final userName = ref.watch(userNameProvider);
-    final isDark = ref.watch(themeModeProvider);
     final prefs = ref.watch(preferencesServiceProvider);
     final shakeVal = prefs.shakeEnabled;
     final notifVal = prefs.notificationsEnabled;
@@ -119,10 +118,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         surfaceTintColor: Colors.transparent,
         elevation: 0,
         scrolledUnderElevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: TimboColors.ink),
-          onPressed: () => context.pop(),
-        ),
         title: Text('Profile', style: TimboTypography.heading3),
       ),
       body: ListView(
@@ -144,15 +139,10 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
           ),
           const SizedBox(height: 12),
           _PreferencesCard(
-            isDark: isDark,
             shakeEnabled: shakeVal,
             notificationsEnabled: notifVal,
             linesEnabled: linesVal,
             defaultFont: defaultFont,
-            onToggleDark: (v) {
-              ref.read(themeModeProvider.notifier).state = v;
-              ref.read(preferencesServiceProvider).darkMode = v;
-            },
             onToggleShake: (v) {
               ref.read(preferencesServiceProvider).shakeEnabled = v;
               setState(() {});
@@ -255,24 +245,20 @@ class _ProfileCard extends StatelessWidget {
 }
 
 class _PreferencesCard extends StatelessWidget {
-  final bool isDark;
   final bool shakeEnabled;
   final bool notificationsEnabled;
   final bool linesEnabled;
   final String defaultFont;
-  final ValueChanged<bool> onToggleDark;
   final ValueChanged<bool> onToggleShake;
   final ValueChanged<bool> onToggleNotifications;
   final ValueChanged<bool> onToggleLines;
   final VoidCallback onFontTap;
 
   const _PreferencesCard({
-    required this.isDark,
     required this.shakeEnabled,
     required this.notificationsEnabled,
     required this.linesEnabled,
     required this.defaultFont,
-    required this.onToggleDark,
     required this.onToggleShake,
     required this.onToggleNotifications,
     required this.onToggleLines,
@@ -289,12 +275,6 @@ class _PreferencesCard extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.fromLTRB(12, 10, 12, 4),
             child: Text('Preferences', style: TimboTypography.heading3.copyWith(fontSize: 16)),
-          ),
-          SwitchListTile(
-            title: Text('Dark Mode', style: TimboTypography.body),
-            value: isDark,
-            onChanged: onToggleDark,
-            activeThumbColor: TimboColors.ink,
           ),
           SwitchListTile(
             title: Text('Shake to Capture', style: TimboTypography.body),

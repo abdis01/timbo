@@ -75,18 +75,26 @@ class _AuthScreenState extends ConsumerState<AuthScreen>
     setState(() => _isLoading = true);
     try {
       final googleSignIn = GoogleSignIn.instance;
-      await googleSignIn.initialize();
-      final account = await googleSignIn.authenticate();
-      final authz = account.authentication;
+      final account = await googleSignIn.authenticate().timeout(const Duration(seconds: 30));
+      if (account == null) {
+        if (mounted) setState(() => _isLoading = false);
+        return;
+      }
+      final authz = await account.authentication;
+      if (authz.idToken == null) {
+        _showError('Google sign-in failed: missing authentication token.');
+        return;
+      }
       final credential = auth.GoogleAuthProvider.credential(idToken: authz.idToken);
       await auth.FirebaseAuth.instance.signInWithCredential(credential);
       final prefs = await ref.read(sharedPrefsProvider.future);
       await prefs.setBool('hasCompletedOnboarding', true);
       if (!mounted) return;
       context.go('/home');
-    } on GoogleSignInException catch (_) {
-      if (mounted) setState(() => _isLoading = false);
-      return;
+    } on GoogleSignInException catch (e) {
+      _showError(e.message ?? 'Google sign-in cancelled');
+    } on TimeoutException {
+      _showError('Google sign-in timed out. Check your connection.');
     } catch (e) {
       _showError('Google sign-in failed. Please try again.');
     } finally {
