@@ -80,7 +80,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen>
         if (mounted) setState(() => _isLoading = false);
         return;
       }
-      final authz = await account.authentication;
+      final authz = account.authentication;
       if (authz.idToken == null) {
         _showError('Google sign-in failed: missing authentication token.');
         return;
@@ -91,10 +91,6 @@ class _AuthScreenState extends ConsumerState<AuthScreen>
       await prefs.setBool('hasCompletedOnboarding', true);
       if (!mounted) return;
       context.go('/home');
-    } on GoogleSignInException catch (e) {
-      _showError(e.message ?? 'Google sign-in cancelled');
-    } on TimeoutException {
-      _showError('Google sign-in timed out. Check your connection.');
     } catch (e) {
       _showError('Google sign-in failed. Please try again.');
     } finally {
