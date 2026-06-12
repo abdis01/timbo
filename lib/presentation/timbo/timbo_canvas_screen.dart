@@ -9,6 +9,7 @@ import 'package:record/record.dart';
 import 'package:uuid/uuid.dart';
 import '../../core/widgets/offline_banner.dart';
 import '../../domain/block.dart';
+import '../../domain/timbo.dart';
 import '../../providers/timbos_provider.dart';
 import '../../providers/blocks_provider.dart';
 import '../../providers/providers.dart';

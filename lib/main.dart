@@ -1,3 +1,4 @@
+import 'dart:io' show Platform;
 import 'dart:ui' show PlatformDispatcher;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -35,8 +36,10 @@ void main() async {
   tz_data.initializeTimeZones();
   await ReminderService().initialize();
 
-  if (await Permission.notification.isGranted == false) {
-    await Permission.notification.request();
+  if (Platform.isAndroid) {
+    if (await Permission.notification.isGranted == false) {
+      await Permission.notification.request();
+    }
   }
 
   final prefs = await SharedPreferences.getInstance();

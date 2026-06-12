@@ -177,13 +177,20 @@ class _TimboAppState extends ConsumerState<TimboApp> {
     final font = ref.watch(userFontFamilyProvider);
     final router = ref.watch(routerProvider);
 
-    final theme = timboLightTheme.copyWith(
-      textTheme: GoogleFonts.getFont(font).textTheme.copyWith(
-        bodyLarge: GoogleFonts.getFont(font, fontSize: 15, fontWeight: FontWeight.w400),
-        bodyMedium: GoogleFonts.getFont(font, fontSize: 14, fontWeight: FontWeight.w400),
-        bodySmall: GoogleFonts.getFont(font, fontSize: 13, fontWeight: FontWeight.w400),
-      ),
+    final textTheme = TextTheme(
+      displayLarge: GoogleFonts.getFont(font, fontSize: 28, fontWeight: FontWeight.w700),
+      displayMedium: GoogleFonts.getFont(font, fontSize: 22, fontWeight: FontWeight.w700),
+      headlineLarge: GoogleFonts.getFont(font, fontSize: 20, fontWeight: FontWeight.w600),
+      headlineMedium: GoogleFonts.getFont(font, fontSize: 18, fontWeight: FontWeight.w600),
+      titleLarge: GoogleFonts.getFont(font, fontSize: 16, fontWeight: FontWeight.w600),
+      titleMedium: GoogleFonts.getFont(font, fontSize: 14, fontWeight: FontWeight.w500),
+      bodyLarge: GoogleFonts.getFont(font, fontSize: 15, fontWeight: FontWeight.w400),
+      bodyMedium: GoogleFonts.getFont(font, fontSize: 14, fontWeight: FontWeight.w400),
+      bodySmall: GoogleFonts.getFont(font, fontSize: 13, fontWeight: FontWeight.w400),
+      labelLarge: GoogleFonts.getFont(font, fontSize: 14, fontWeight: FontWeight.w500),
+      labelSmall: GoogleFonts.getFont(font, fontSize: 11, fontWeight: FontWeight.w500),
     );
+    final theme = timboLightTheme.copyWith(textTheme: textTheme);
 
     return MaterialApp.router(
       title: 'Timbo',
