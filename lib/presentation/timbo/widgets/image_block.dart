@@ -8,6 +8,7 @@ class ImageBlock extends StatefulWidget {
   final String? caption;
   final VoidCallback? onDelete;
   final void Function(double width, double height)? onResize;
+  final bool readOnly;
 
   const ImageBlock({
     super.key,
@@ -16,6 +17,7 @@ class ImageBlock extends StatefulWidget {
     this.caption,
     this.onDelete,
     this.onResize,
+    this.readOnly = false,
   });
 
   @override
@@ -89,62 +91,28 @@ class _ImageBlockState extends State<ImageBlock> with SingleTickerProviderStateM
 
   @override
   Widget build(BuildContext context) {
+    final isInteractive = !widget.readOnly;
     return GestureDetector(
-      onTapDown: (_) => _controller.forward(),
-      onTapUp: (_) {
+      onTapDown: isInteractive ? (_) => _controller.forward() : null,
+      onTapUp: isInteractive ? (_) {
         _controller.reverse();
         _showFullScreen(context);
-      },
-      onTapCancel: () => _controller.reverse(),
-      onLongPress: () => _showDeleteDialog(context),
-      onScaleUpdate: widget.onResize != null
-          ? (details) {
-              if (details.pointerCount == 2) {
-                final scale = details.scale;
-                _onResizeUpdate((scale - 1.0) * 10, (scale - 1.0) * 8);
-              }
-            }
-          : null,
-      child: ScaleTransition(
-        scale: _scaleAnim,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-          child: SizedBox(
-            width: _width,
-            child: Stack(
-              children: [
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(4),
-                  child: Image.file(
-                    File(widget.filePath),
-                    width: _width,
-                    height: _height,
-                    fit: BoxFit.cover,
-                    errorBuilder: (_, __, ___) => Container(
-                      height: _height,
-                      color: TimboColors.surfaceAlt,
-                      child: const Center(child: Icon(Icons.broken_image, color: TimboColors.inkFaint)),
-                    ),
-                  ),
-                ),
-                if (widget.onResize != null)
-                  Positioned(
-                    right: 0,
-                    bottom: 0,
-                    child: GestureDetector(
-                      onPanUpdate: (d) => _onResizeUpdate(d.delta.dx, d.delta.dy),
-                      child: Container(
-                        width: 20,
-                        height: 20,
-                        decoration: const BoxDecoration(
-                          color: TimboColors.ink,
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Icon(Icons.arrow_upward, color: Colors.white, size: 10),
-                      ),
-                    ),
-                  ),
-              ],
+      } : null,
+      onTapCancel: isInteractive ? () => _controller.reverse() : null,
+      onLongPress: isInteractive ? () => _showDeleteDialog(context) : null,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(4),
+          child: Image.file(
+            File(widget.filePath),
+            height: 200,
+            width: double.infinity,
+            fit: BoxFit.cover,
+            errorBuilder: (_, __, ___) => Container(
+              height: 200,
+              color: TimboColors.surfaceAlt,
+              child: const Center(child: Icon(Icons.broken_image, color: TimboColors.inkFaint)),
             ),
           ),
         ),

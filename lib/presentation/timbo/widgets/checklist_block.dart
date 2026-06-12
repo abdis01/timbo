@@ -64,12 +64,14 @@ class ChecklistBlock extends ConsumerStatefulWidget {
   final int blockId;
   final List<ChecklistItem> initialItems;
   final VoidCallback? onDelete;
+  final bool readOnly;
 
   const ChecklistBlock({
     super.key,
     required this.blockId,
     required this.initialItems,
     this.onDelete,
+    this.readOnly = false,
   });
 
   @override
@@ -181,21 +183,23 @@ class _ChecklistBlockState extends ConsumerState<ChecklistBlock>
             _buildItem(i),
             if (i < _items.length - 1) const SizedBox(height: 2),
           ],
-          const SizedBox(height: 4),
-          InkWell(
-            onTap: _addItem,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
-              child: Row(
-                children: [
-                  const SizedBox(width: 28),
-                  Icon(Icons.add, size: 16, color: TimboColors.inkFaint),
-                  const SizedBox(width: 8),
-                  Text('Add item', style: TimboTypography.bodySmall.copyWith(color: TimboColors.inkFaint)),
-                ],
+          if (!widget.readOnly) ...[
+            const SizedBox(height: 4),
+            InkWell(
+              onTap: _addItem,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
+                child: Row(
+                  children: [
+                    const SizedBox(width: 28),
+                    Icon(Icons.add, size: 16, color: TimboColors.inkFaint),
+                    const SizedBox(width: 8),
+                    Text('Add item', style: TimboTypography.bodySmall.copyWith(color: TimboColors.inkFaint)),
+                  ],
+                ),
               ),
             ),
-          ),
+          ],
         ],
       ),
     );
@@ -224,28 +228,41 @@ class _ChecklistBlockState extends ConsumerState<ChecklistBlock>
         ),
         const SizedBox(width: 8),
         Expanded(
-          child: TextField(
-            controller: item.controller,
-            decoration: InputDecoration(
-              border: InputBorder.none,
-              isCollapsed: true,
-              contentPadding: const EdgeInsets.symmetric(vertical: 6),
-            ),
-            style: TimboTypography.body.copyWith(
-              height: 1.4,
-              decoration: item.isChecked ? TextDecoration.lineThrough : null,
-              color: item.isChecked ? TimboColors.checked : TimboColors.ink,
-            ),
-            onChanged: (val) => _updateText(index, val),
-          ),
+          child: widget.readOnly
+              ? Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 6),
+                  child: Text(
+                    item.text,
+                    style: TimboTypography.body.copyWith(
+                      height: 1.4,
+                      decoration: item.isChecked ? TextDecoration.lineThrough : null,
+                      color: item.isChecked ? TimboColors.checked : TimboColors.ink,
+                    ),
+                  ),
+                )
+              : TextField(
+                  controller: item.controller,
+                  decoration: InputDecoration(
+                    border: InputBorder.none,
+                    isCollapsed: true,
+                    contentPadding: const EdgeInsets.symmetric(vertical: 6),
+                  ),
+                  style: TimboTypography.body.copyWith(
+                    height: 1.4,
+                    decoration: item.isChecked ? TextDecoration.lineThrough : null,
+                    color: item.isChecked ? TimboColors.checked : TimboColors.ink,
+                  ),
+                  onChanged: (val) => _updateText(index, val),
+                ),
         ),
-        GestureDetector(
-          onTap: () => _removeItem(index),
-          child: Padding(
-            padding: const EdgeInsets.all(4),
-            child: Icon(Icons.close, size: 14, color: TimboColors.inkFaint),
+        if (!widget.readOnly)
+          GestureDetector(
+            onTap: () => _removeItem(index),
+            child: Padding(
+              padding: const EdgeInsets.all(4),
+              child: Icon(Icons.close, size: 14, color: TimboColors.inkFaint),
+            ),
           ),
-        ),
       ],
     );
   }

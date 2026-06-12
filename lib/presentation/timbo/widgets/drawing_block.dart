@@ -7,11 +7,13 @@ import '../../../providers/blocks_provider.dart';
 class DrawingBlock extends ConsumerStatefulWidget {
   final int blockId;
   final List<DrawingStroke> initialStrokes;
+  final bool readOnly;
 
   const DrawingBlock({
     super.key,
     required this.blockId,
     required this.initialStrokes,
+    this.readOnly = false,
   });
 
   @override
@@ -96,45 +98,52 @@ class _DrawingBlockState extends ConsumerState<DrawingBlock> {
             ),
             child: ClipRRect(
               borderRadius: BorderRadius.circular(16),
-              child: GestureDetector(
-                onPanStart: _onPanStart,
-                onPanUpdate: _onPanUpdate,
-                onPanEnd: _onPanEnd,
-                child: CustomPaint(
-                  painter: _DrawingPainter(
-                    strokes: _strokes,
-                    currentStroke: _currentStroke,
-                  ),
-                  size: const Size(double.infinity, 200),
-                ),
-              ),
+              child: widget.readOnly
+                  ? CustomPaint(
+                      painter: _DrawingPainter(strokes: _strokes),
+                      size: const Size(double.infinity, 200),
+                    )
+                  : GestureDetector(
+                      onPanStart: _onPanStart,
+                      onPanUpdate: _onPanUpdate,
+                      onPanEnd: _onPanEnd,
+                      child: CustomPaint(
+                        painter: _DrawingPainter(
+                          strokes: _strokes,
+                          currentStroke: _currentStroke,
+                        ),
+                        size: const Size(double.infinity, 200),
+                      ),
+                    ),
             ),
           ),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              ..._colors.map((c) => GestureDetector(
-                onTap: () => setState(() => _currentColor = c),
-                child: Container(
-                  width: 24,
-                  height: 24,
-                  margin: const EdgeInsets.only(right: 8),
-                  decoration: BoxDecoration(
-                    color: c,
-                    shape: BoxShape.circle,
-                    border: Border.all(
-                      color: _currentColor == c ? TimboColors.ink : Colors.transparent,
-                      width: 2,
+          if (!widget.readOnly) ...[
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                ..._colors.map((c) => GestureDetector(
+                  onTap: () => setState(() => _currentColor = c),
+                  child: Container(
+                    width: 24,
+                    height: 24,
+                    margin: const EdgeInsets.only(right: 8),
+                    decoration: BoxDecoration(
+                      color: c,
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: _currentColor == c ? TimboColors.ink : Colors.transparent,
+                        width: 2,
+                      ),
                     ),
                   ),
-                ),
-              )),
-              const Spacer(),
-              _ToolButton(icon: Icons.undo_rounded, onTap: _undo),
-              const SizedBox(width: 8),
-              _ToolButton(icon: Icons.delete_outline_rounded, onTap: _clear),
-            ],
-          ),
+                )),
+                const Spacer(),
+                _ToolButton(icon: Icons.undo_rounded, onTap: _undo),
+                const SizedBox(width: 8),
+                _ToolButton(icon: Icons.delete_outline_rounded, onTap: _clear),
+              ],
+            ),
+          ],
         ],
       ),
     );

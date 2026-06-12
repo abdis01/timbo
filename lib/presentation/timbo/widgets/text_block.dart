@@ -10,12 +10,14 @@ class TextBlock extends ConsumerStatefulWidget {
   final int blockId;
   final String initialContent;
   final String? fontFamily;
+  final bool readOnly;
 
   const TextBlock({
     super.key,
     required this.blockId,
     required this.initialContent,
     this.fontFamily,
+    this.readOnly = false,
   });
 
   @override
@@ -83,35 +85,45 @@ class _TextBlockState extends ConsumerState<TextBlock> {
 
   @override
   Widget build(BuildContext context) {
+    final content = _controller.text.trim();
+    if (widget.readOnly) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        child: content.isEmpty
+            ? const SizedBox.shrink()
+            : Text(content, style: _resolveStyle()),
+      );
+    }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Padding(
-          padding: const EdgeInsets.only(left: 12, top: 4),
-          child: GestureDetector(
-            onTap: _showFontPicker,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-              decoration: BoxDecoration(
-                color: TimboColors.ink.withValues(alpha: 0.06),
-                borderRadius: BorderRadius.circular(6),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.text_fields, size: 12, color: TimboColors.inkFaint),
-                  const SizedBox(width: 4),
-                  Text(
-                    _fontFamily ?? 'Inter',
-                    style: TextStyle(fontSize: 10, color: TimboColors.inkFaint),
-                  ),
-                  const SizedBox(width: 2),
-                  Icon(Icons.expand_more, size: 12, color: TimboColors.inkFaint),
-                ],
+        if (content.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(left: 12, top: 4),
+            child: GestureDetector(
+              onTap: _showFontPicker,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: TimboColors.ink.withValues(alpha: 0.06),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.text_fields, size: 12, color: TimboColors.inkFaint),
+                    const SizedBox(width: 4),
+                    Text(
+                      _fontFamily ?? 'Inter',
+                      style: TextStyle(fontSize: 10, color: TimboColors.inkFaint),
+                    ),
+                    const SizedBox(width: 2),
+                    Icon(Icons.expand_more, size: 12, color: TimboColors.inkFaint),
+                  ],
+                ),
               ),
             ),
           ),
-        ),
         TextField(
           controller: _controller,
           decoration: InputDecoration(
