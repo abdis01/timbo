@@ -6,6 +6,10 @@ import '../database/database.dart';
 import '../services/sync_service.dart';
 import '../services/preferences_service.dart';
 
+export 'folders_provider.dart';
+export 'timbos_provider.dart';
+export 'ai_provider.dart';
+
 final databaseProvider = Provider<TimboDatabase>((ref) => TimboDatabase());
 
 final connectivityProvider = StreamProvider<List<ConnectivityResult>>((ref) {
@@ -37,7 +41,9 @@ final hasCompletedOnboardingProvider = FutureProvider<bool>((ref) async {
 final isRecordingProvider = StateProvider<bool>((ref) => false);
 
 final syncServiceProvider = Provider<SyncService>((ref) {
-  return SyncService();
+  final service = SyncService();
+  service.initialize();
+  return service;
 });
 
 final userGreetingProvider = Provider<String>((ref) {
@@ -65,12 +71,17 @@ final userNameProvider = Provider<String>((ref) {
 });
 
 final preferencesServiceProvider = Provider<PreferencesService>((ref) {
-  throw Exception('PreferencesService not initialized — override in ProviderScope');
+  throw UnimplementedError('PreferencesService not initialized — override in ProviderScope');
 });
 
 final userFontFamilyProvider = Provider<String>((ref) {
   final prefs = ref.watch(preferencesServiceProvider);
   return prefs.defaultFont;
+});
+
+final shakeEnabledProvider = Provider<bool>((ref) {
+  final prefs = ref.watch(preferencesServiceProvider);
+  return prefs.shakeEnabled;
 });
 
 

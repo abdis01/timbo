@@ -7,6 +7,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:record/record.dart';
 import 'package:uuid/uuid.dart';
+import 'package:flutter/services.dart';
 import '../../core/widgets/offline_banner.dart';
 import '../../domain/block.dart';
 import '../../domain/timbo.dart';
@@ -18,7 +19,6 @@ import 'widgets/text_block.dart';
 import 'widgets/image_block.dart';
 import 'widgets/voice_block.dart';
 import 'widgets/checklist_block.dart';
-import 'widgets/drawing_block.dart';
 import 'widgets/add_block_bar.dart';
 import 'widgets/reminder_sheet.dart';
 
@@ -36,14 +36,20 @@ class _TimboCanvasScreenState extends ConsumerState<TimboCanvasScreen> {
   bool _isRecording = false;
   final AudioRecorder _recorder = AudioRecorder();
   String? _recordingPath;
-  final TextEditingController _bodyController = TextEditingController();
   bool _initialTitleLoaded = false;
 
   @override
   void initState() {
     super.initState();
-    final timbo = ref.read(timboProvider(widget.timboId)).valueOrNull;
-    if (timbo != null) _loadTimbo(timbo);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!_initialTitleLoaded) {
+      final timbo = ref.read(timboProvider(widget.timboId)).valueOrNull;
+      if (timbo != null) _loadTimbo(timbo);
+    }
   }
 
   void _loadTimbo(TimboModel timbo) {
@@ -54,7 +60,6 @@ class _TimboCanvasScreenState extends ConsumerState<TimboCanvasScreen> {
   @override
   void dispose() {
     _titleController.dispose();
-    _bodyController.dispose();
     _recorder.dispose();
     super.dispose();
   }
@@ -73,6 +78,45 @@ class _TimboCanvasScreenState extends ConsumerState<TimboCanvasScreen> {
         backgroundColor: TimboColors.ink,
       ),
     );
+  }
+
+  Future<void> _pinToHome() async {
+    try {
+      const channel = MethodChannel('com.timbo.app/shortcut');
+      await channel.invokeMethod('pinShortcut', {
+        'id': widget.timboId.toString(),
+        'shortLabel': _titleController.text.trim().isNotEmpty 
+            ? _titleController.text.trim() 
+            : 'Timbo Note',
+        'longLabel': 'Open Timbo note',
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Pinned to home screen!'),
+            behavior: SnackBarBehavior.floating,
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Could not pin: ${e.toString()}'),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _shareTimbo() async {
+    final title = _titleController.text.trim().isNotEmpty ? _titleController.text.trim() : 'Untitled';
+    try {
+      await const MethodChannel('com.timbo.app/share')
+          .invokeMethod('shareText', {'title': title, 'text': title});
+    } catch (_) {}
   }
 
   Future<void> _onAddBlock(AddBlockType type) async {
@@ -102,8 +146,6 @@ class _TimboCanvasScreenState extends ConsumerState<TimboCanvasScreen> {
       case AddBlockType.checklist:
         final item = ChecklistItem(id: const Uuid().v4(), text: '', isChecked: false);
         await ref.read(blockRepositoryProvider).addChecklistBlock(widget.timboId, [item]);
-      case AddBlockType.drawing:
-        await ref.read(blockRepositoryProvider).addDrawingBlock(widget.timboId, []);
     }
   }
 
@@ -156,11 +198,15 @@ class _TimboCanvasScreenState extends ConsumerState<TimboCanvasScreen> {
         content: const Text('This action cannot be undone.'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-          TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Delete')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Delete', style: TextStyle(color: Colors.red, fontWeight: FontWeight.w600)),
+          ),
         ],
       ),
     );
     if (confirmed == true) {
+      HapticFeedback.heavyImpact();
       await ref.read(timboRepositoryProvider).deleteTimbo(widget.timboId);
       if (mounted) context.pop();
     }
@@ -172,10 +218,6 @@ class _TimboCanvasScreenState extends ConsumerState<TimboCanvasScreen> {
     final blocksAsync = ref.watch(blocksProvider(widget.timboId));
     final timbo = timboAsync.valueOrNull;
     final blocks = blocksAsync.valueOrNull ?? [];
-
-    if (timbo != null && !_initialTitleLoaded) {
-      _loadTimbo(timbo);
-    }
 
     return Scaffold(
       backgroundColor: TimboColors.surface,
@@ -205,6 +247,8 @@ class _TimboCanvasScreenState extends ConsumerState<TimboCanvasScreen> {
                 child: Text(
                   timbo?.title?.isNotEmpty == true ? timbo!.title! : 'Untitled',
                   style: TimboTypography.heading3,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
         actions: [
@@ -252,25 +296,48 @@ class _TimboCanvasScreenState extends ConsumerState<TimboCanvasScreen> {
             icon: const Icon(Icons.more_vert, color: TimboColors.ink),
             onSelected: (val) {
               if (val == 'delete') _deleteTimbo();
+              if (val == 'pin') _pinToHome();
+              if (val == 'share') _shareTimbo();
             },
             itemBuilder: (_) => [
-              const PopupMenuItem(value: 'delete', child: Text('Delete note')),
+              const PopupMenuItem(value: 'pin', child: ListTile(
+                leading: Icon(Icons.push_pin_outlined, size: 18),
+                title: Text('Pin to Home'),
+                dense: true,
+                contentPadding: EdgeInsets.zero,
+              )),
+              const PopupMenuItem(value: 'share', child: ListTile(
+                leading: Icon(Icons.share_outlined, size: 18),
+                title: Text('Share'),
+                dense: true,
+                contentPadding: EdgeInsets.zero,
+              )),
+              const PopupMenuItem(value: 'delete', child: ListTile(
+                leading: Icon(Icons.delete_outline, size: 18, color: Colors.red),
+                title: Text('Delete note', style: TextStyle(color: Colors.red)),
+                dense: true,
+                contentPadding: EdgeInsets.zero,
+              )),
             ],
           ),
         ],
       ),
-      body: Column(
-        children: [
-          const OfflineBanner(),
-          if (timbo == null)
-            const Expanded(child: Center(child: CircularProgressIndicator()))
-          else
-            Expanded(
-              child: _isEditing ? _buildEditor(blocks) : _buildPreview(blocks),
-            ),
-          if (_isEditing) AddBlockBar(onAdd: _onAddBlock),
-        ],
+      body: SafeArea(
+        child: Column(
+          children: [
+            const OfflineBanner(),
+            if (timbo == null)
+              const Expanded(child: Center(child: CircularProgressIndicator()))
+            else
+              Expanded(
+                child: _isEditing ? _buildEditor(blocks) : _buildPreview(blocks),
+              ),
+          ],
+        ),
       ),
+      bottomNavigationBar: _isEditing
+          ? AddBlockBar(onAdd: _onAddBlock)
+          : null,
     );
   }
 
@@ -306,7 +373,7 @@ class _TimboCanvasScreenState extends ConsumerState<TimboCanvasScreen> {
 
   Widget _buildEditor(List<BlockModel> blocks) {
     return ListView.builder(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      padding: const EdgeInsets.only(left: 16, right: 16, top: 8, bottom: 80),
       itemCount: blocks.length,
       itemBuilder: (_, i) {
         final block = blocks[i];
@@ -333,8 +400,6 @@ class _TimboCanvasScreenState extends ConsumerState<TimboCanvasScreen> {
         return VoiceBlock(blockId: block.id, filePath: block.filePath ?? '');
       case BlockType.checklist:
         return ChecklistBlock(blockId: block.id, initialItems: block.checklistItems ?? [], readOnly: readOnly);
-      case BlockType.drawing:
-        return DrawingBlock(blockId: block.id, initialStrokes: block.drawingStrokes ?? [], readOnly: readOnly);
     }
   }
 }

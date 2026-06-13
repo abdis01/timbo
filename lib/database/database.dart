@@ -37,6 +37,7 @@ class TimboDatabase extends _$TimboDatabase {
           await m.createTable(timbos);
           await m.createTable(blocks);
           await m.createTable(chatMessages);
+          await m.createTable(captures);
         }
         if (from < 3) {
           await m.addColumn(blocks, blocks.drawingData);

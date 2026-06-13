@@ -3,7 +3,7 @@ import 'folders_table.dart';
 
 class Timbos extends Table {
   IntColumn get id => integer().autoIncrement()();
-  IntColumn get folderId => integer().references(Folders, #id)();
+  IntColumn get folderId => integer().references(Folders, #id, onDelete: KeyAction.cascade)();
   TextColumn get title => text().nullable()();
   DateTimeColumn get createdAt => dateTime()();
   DateTimeColumn get updatedAt => dateTime()();

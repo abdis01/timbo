@@ -24,7 +24,12 @@ class FolderCard extends ConsumerWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(folder.title.split(',')[0], style: TimboTypography.folderTitle),
+          Text(
+            folder.title.split(',')[0], 
+            style: TimboTypography.folderTitle,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
           const SizedBox(height: 2),
           Text(
             DateFormat('MMMM d, yyyy').format(folder.date),
@@ -79,7 +84,9 @@ class _PreviewChip extends StatelessWidget {
           borderRadius: BorderRadius.circular(20),
         ),
         child: Text(
-          label.length > 12 ? '${label.substring(0, 12)}...' : label,
+          label,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
           style: GoogleFonts.caveat(fontSize: 12, color: TimboColors.ink),
         ),
       ),

@@ -1,10 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/widgets/offline_banner.dart';
-import '../../providers/folders_provider.dart';
-import '../../providers/ai_provider.dart';
-import '../../providers/timbos_provider.dart';
 import '../../providers/providers.dart';
 import '../../theme/colors.dart';
 import 'widgets/folder_card.dart';
@@ -28,19 +26,16 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
       vsync: this,
       duration: const Duration(milliseconds: 600),
     );
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _hasAnimated = true;
+      _animController.forward();
+    });
   }
 
   @override
   void dispose() {
     _animController.dispose();
     super.dispose();
-  }
-
-  void _triggerStagger() {
-    if (!_hasAnimated) {
-      _hasAnimated = true;
-      WidgetsBinding.instance.addPostFrameCallback((_) => _animController.forward());
-    }
   }
 
   @override
@@ -53,22 +48,25 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
 
     return Scaffold(
       backgroundColor: TimboColors.appBackground,
-      body: CustomScrollView(
-        slivers: [
-          SliverToBoxAdapter(child: OfflineBanner()),
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('$greeting, $userName', style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w700, color: TimboColors.ink)),
-                  const SizedBox(height: 2),
-                  Text(date, style: const TextStyle(fontSize: 13, color: TimboColors.inkLight)),
-                ],
+      resizeToAvoidBottomInset: false,
+      body: SafeArea(
+        top: false,
+        child: CustomScrollView(
+          slivers: [
+            SliverToBoxAdapter(child: OfflineBanner()),
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 24, 20, 0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('$greeting, $userName', style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w700, color: TimboColors.ink)),
+                    const SizedBox(height: 2),
+                    Text(date, style: const TextStyle(fontSize: 13, color: TimboColors.inkLight)),
+                  ],
+                ),
               ),
             ),
-          ),
           const SliverToBoxAdapter(child: SizedBox(height: 16)),
           SliverToBoxAdapter(
             child: Padding(
@@ -83,7 +81,31 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
           const SliverToBoxAdapter(child: SizedBox(height: 16)),
           folders.when(
             data: (list) {
-              _triggerStagger();
+              if (list.isEmpty) {
+                return const SliverToBoxAdapter(
+                  child: Center(
+                    child: Padding(
+                      padding: EdgeInsets.only(top: 48),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.auto_stories_outlined, size: 64, color: TimboColors.inkFaint),
+                          SizedBox(height: 16),
+                          Text(
+                            'No Timbos yet',
+                            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: TimboColors.ink),
+                          ),
+                          SizedBox(height: 4),
+                          Text(
+                            'Tap + to create your first Timbo',
+                            style: TextStyle(fontSize: 13, color: TimboColors.inkFaint),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                );
+              }
               return SliverGrid(
                 gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                   crossAxisCount: 2,
@@ -129,8 +151,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with SingleTickerProvid
               child: Center(child: Text('Error loading folders')),
             ),
           ),
-          const SliverToBoxAdapter(child: SizedBox(height: 80)),
+          const SliverToBoxAdapter(child: SizedBox(height: 96)),
         ],
+      ),
       ),
       floatingActionButton: _FabButton(onTap: () async {
         final folder = await ref.read(folderRepositoryProvider).getOrCreateTodayFolder();
@@ -178,6 +201,7 @@ class _FabButtonState extends State<_FabButton> with SingleTickerProviderStateMi
       onTapDown: (_) => _controller.forward(),
       onTapUp: (_) {
         _controller.reverse();
+        HapticFeedback.mediumImpact();
         widget.onTap();
       },
       onTapCancel: () => _controller.reverse(),

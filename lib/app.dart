@@ -1,12 +1,9 @@
-import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:flutter/services.dart';
 import 'providers/providers.dart';
-import 'providers/folders_provider.dart';
-import 'providers/timbos_provider.dart';
 import 'theme/theme.dart';
 import 'screens/profile_screen.dart';
 import 'screens/auth_screen.dart';
@@ -18,8 +15,9 @@ import 'presentation/timbo/timbo_canvas_screen.dart';
 import 'presentation/ai_chat/ai_chat_screen.dart';
 import 'presentation/search/search_screen.dart';
 import 'presentation/main_shell.dart';
+import 'presentation/capture/quick_capture_sheet.dart';
 import 'services/sync_service.dart';
-import 'services/shake_service.dart';
+import 'services/foreground_shake_detector.dart';
 
 final _rootNavigatorKey = GlobalKey<NavigatorState>();
 final _shellNavigatorKey = GlobalKey<NavigatorState>();
@@ -121,49 +119,91 @@ class TimboApp extends ConsumerStatefulWidget {
 
 class _TimboAppState extends ConsumerState<TimboApp> {
   SyncService? _syncService;
-  StreamSubscription? _shakeSubscription;
+  ForegroundShakeDetector? _shakeDetector;
+  static const _captureChannel = MethodChannel('com.timbo.app/capture');
+  static const _shakeChannel = MethodChannel('com.timbo.app/shake');
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _shakeSubscription = ref.read(shakeServiceProvider).onShake.listen((_) async {
-        _showShakeFlash();
-        final folder = await ref.read(folderRepositoryProvider).getOrCreateTodayFolder();
-        final timboId = await ref.read(timboRepositoryProvider).createTimbo(folderId: folder.id);
-        if (mounted) ref.read(routerProvider).go('/timbo/$timboId');
-      });
+    _captureChannel.setMethodCallHandler((call) async {
+      if (call.method == 'onCapture') {
+        _showQuickCapture();
+      } else if (call.method == 'onShare') {
+        _showQuickCapture(initialText: call.arguments as String?);
+      }
+      return null;
     });
+
+    // Initialize foreground shake detector
+    _shakeDetector = ForegroundShakeDetector(onShakeDetected: _handleForegroundShake);
   }
 
-  void _showShakeFlash() {
-    final context = _rootNavigatorKey.currentContext;
-    if (context == null) return;
-    try { HapticFeedback.lightImpact(); } catch (_) {}
+  Future<void> _handleForegroundShake() async {
+    if (!mounted) return;
+    
+    // Show haptic feedback (already done in detector, but adding snackbar for visibility)
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Shake detected! Opening new Timbo...'),
+        duration: Duration(seconds: 1),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+
     try {
-      OverlayEntry entry = OverlayEntry(
-        builder: (_) => IgnorePointer(
-          child: AnimatedOpacity(
-            opacity: 0.0,
-            duration: const Duration(milliseconds: 80),
-            child: Container(color: Colors.white.withValues(alpha: 0.15)),
-          ),
-        ),
+      // Create a new Timbo in today's folder
+      final folder = await ref.read(folderRepositoryProvider).getOrCreateTodayFolder();
+      final timboId = await ref.read(timboRepositoryProvider).createTimbo(
+        folderId: folder.id,
+        title: 'New Timbo',
       );
-      Overlay.of(context).insert(entry);
-      Future.delayed(const Duration(milliseconds: 80), entry.remove);
-    } catch (_) {}
+      
+      // Navigate to the new Timbo
+      if (mounted) {
+        context.go('/timbo/$timboId');
+      }
+    } catch (e) {
+      debugPrint('Error creating Timbo on shake: $e');
+    }
+  }
+
+  void _showQuickCapture({String? initialText}) {
+    if (mounted) {
+      showModalBottomSheet(
+        context: context,
+        isScrollControlled: true,
+        backgroundColor: Colors.transparent,
+        builder: (_) => QuickCaptureSheet(initialText: initialText),
+      );
+    }
   }
 
   @override
   void dispose() {
-    _shakeSubscription?.cancel();
+    _captureChannel.setMethodCallHandler(null);
+    _shakeDetector?.dispose();
     _syncService?.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    // Start/stop foreground shake detector based on preference
+    final shakeEnabled = ref.watch(shakeEnabledProvider);
+    if (shakeEnabled) {
+      _shakeDetector?.startListening(ref);
+    } else {
+      _shakeDetector?.stopListening();
+    }
+
+    ref.listen(shakeEnabledProvider, (prev, next) {
+      if (next) {
+        _shakeChannel.invokeMethod('start');
+      } else {
+        _shakeChannel.invokeMethod('stop');
+      }
+    });
     ref.listen(isOnlineProvider, (prev, next) {
       if (next && _syncService == null) {
         _syncService = SyncService();

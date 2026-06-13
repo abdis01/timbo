@@ -73,6 +73,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen>
 
   Future<void> _requestPermission(Permission permission) async {
     final status = await permission.request();
+    if (!mounted) return;
     if (status.isGranted) {
       setState(() => _granted[permission] = true);
     }

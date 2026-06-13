@@ -34,8 +34,21 @@ class _ImageBlockState extends State<ImageBlock> {
           ),
           body: Center(
             child: InteractiveViewer(
-              child: Image.file(File(widget.filePath)),
+            child: Image.file(
+              File(widget.filePath),
+              errorBuilder: (_, __, ___) => const Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.broken_image, color: Colors.white54, size: 64),
+                    SizedBox(height: 16),
+                    Text('Image not found', style: TextStyle(color: Colors.white54)),
+                  ],
+                ),
+              ),
+              fit: BoxFit.contain,
             ),
+          ),
           ),
         ),
       ),

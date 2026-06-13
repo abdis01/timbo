@@ -171,12 +171,12 @@ class _AuthScreenState extends ConsumerState<AuthScreen>
                 ),
                 const SizedBox(height: 24),
                 SizedBox(
-                  height: _tabController.index == 0 ? 340 : 280,
+                  height: _tabController.index == 0 ? 360 : 300,
                   child: TabBarView(
                     controller: _tabController,
                     children: [
-                      _buildSignUpForm(),
-                      _buildLoginForm(),
+                      SingleChildScrollView(child: _buildSignUpForm()),
+                      SingleChildScrollView(child: _buildLoginForm()),
                     ],
                   ),
                 ),
@@ -298,12 +298,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen>
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Image.network(
-              'https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg',
-              width: 18,
-              height: 18,
-              errorBuilder: (_, __, ___) => const Icon(Icons.g_mobiledata, size: 22),
-            ),
+            const Icon(Icons.g_mobiledata, size: 22),
             const SizedBox(width: 10),
             Text('Sign in with Google', style: TimboTypography.body.copyWith(fontWeight: FontWeight.w500)),
           ],

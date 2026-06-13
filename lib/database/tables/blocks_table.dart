@@ -3,7 +3,7 @@ import 'timbos_table.dart';
 
 class Blocks extends Table {
   IntColumn get id => integer().autoIncrement()();
-  IntColumn get timboId => integer().references(Timbos, #id)();
+  IntColumn get timboId => integer().references(Timbos, #id, onDelete: KeyAction.cascade)();
   TextColumn get type => text()();
   IntColumn get sortOrder => integer()();
   TextColumn get textContent => text().nullable()();

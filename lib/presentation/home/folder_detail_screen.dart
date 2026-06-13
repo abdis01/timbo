@@ -34,6 +34,8 @@ class FolderDetailScreen extends ConsumerWidget {
         title: Text(
           folder?.title ?? 'Folder',
           style: TimboTypography.folderTitle,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
         ),
       ),
       body: Column(
@@ -42,7 +44,24 @@ class FolderDetailScreen extends ConsumerWidget {
           Expanded(
             child: timbos.when(
               data: (list) => list.isEmpty
-                  ? const Center(child: Text('No Timbos yet', style: TextStyle(color: TimboColors.inkFaint)))
+                  ? Center(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.note_add_outlined, size: 64, color: TimboColors.inkFaint),
+                          const SizedBox(height: 16),
+                          Text(
+                            'This folder is empty',
+                            style: TimboTypography.body.copyWith(color: TimboColors.ink, fontWeight: FontWeight.w600),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Tap + to create your first Timbo',
+                            style: TimboTypography.body.copyWith(color: TimboColors.inkFaint, fontSize: 13),
+                          ),
+                        ],
+                      ),
+                    )
                   : ListView.builder(
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                   itemCount: list.length,

@@ -61,7 +61,9 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
   }
 
   Future<void> _navigate() async {
+    if (!mounted) return;
     final prefs = await ref.read(sharedPrefsProvider.future);
+    if (!mounted) return;
     final hasOnboarded = prefs.getBool('hasCompletedOnboarding') ?? false;
 
     if (!hasOnboarded) {
@@ -75,6 +77,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
         context.go('/auth');
       }
     } catch (_) {
+      if (!mounted) return;
       context.go('/auth');
     }
   }

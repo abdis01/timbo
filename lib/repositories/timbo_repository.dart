@@ -54,6 +54,7 @@ class TimboRepository {
     return _timboDao.updateTimbo(TimbosCompanion(
       id: Value(id),
       title: Value(title),
+      updatedAt: Value(DateTime.now()),
     ));
   }
 
@@ -67,6 +68,7 @@ class TimboRepository {
       reminderSet: const Value(true),
       reminderTimestamp: Value(timestamp),
       reminderLabel: Value(label),
+      updatedAt: Value(DateTime.now()),
     ));
   }
 
@@ -76,6 +78,7 @@ class TimboRepository {
       reminderSet: const Value(false),
       reminderTimestamp: const Value(null),
       reminderLabel: const Value(null),
+      updatedAt: Value(DateTime.now()),
     ));
   }
 

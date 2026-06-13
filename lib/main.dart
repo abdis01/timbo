@@ -1,9 +1,9 @@
 import 'dart:io' show Platform;
 import 'dart:ui' show PlatformDispatcher;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_core/firebase_core.dart';
-import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:timezone/data/latest.dart' as tz_data;
@@ -15,26 +15,69 @@ import 'providers/providers.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  
+  // Lock orientation to portrait
+  SystemChrome.setPreferredOrientations([
+    DeviceOrientation.portraitUp,
+  ]);
+  
+  // Set status bar color to match app background
+  SystemChrome.setSystemUIOverlayStyle(
+    SystemUiOverlayStyle.dark.copyWith(
+      statusBarColor: const Color(0xFFF5F0E8), // TimboColors.appBackground
+    ),
+  );
+
+  FlutterError.onError = (details) {
+    debugPrint('\n===== FATAL FLUTTER ERROR =====');
+    debugPrint('Exception: ${details.exception}');
+    debugPrint('Stack: ${details.stack}');
+    debugPrint('===== END =====\n');
+  };
+  PlatformDispatcher.instance.onError = (error, stack) {
+    debugPrint('\n===== PLATFORM ERROR =====');
+    debugPrint('Error: $error');
+    debugPrint('Stack: $stack');
+    debugPrint('===== END =====\n');
+    return true;
+  };
+
+  ErrorWidget.builder = (details) {
+    return Directionality(
+      textDirection: TextDirection.ltr,
+      child: Material(
+        color: Colors.white,
+        child: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.error, color: Colors.red, size: 64),
+                  const SizedBox(height: 20),
+                  const Text('ERROR', style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.red)),
+                  const SizedBox(height: 16),
+                  Text('${details.exception}', style: const TextStyle(fontSize: 14, color: Colors.black87), textAlign: TextAlign.center),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  };
 
   try {
     await Firebase.initializeApp(
       options: DefaultFirebaseOptions.currentPlatform,
     );
-    FlutterError.onError = (details) {
-      FirebaseCrashlytics.instance.recordFlutterFatalError(details);
-    };
-    PlatformDispatcher.instance.onError = (error, stack) {
-      FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
-      return true;
-    };
-  } catch (_) {
-    FlutterError.onError = (details) {
-      debugPrint('FlutterError: ${details.exception}\n${details.stack}');
-    };
+  } catch (e) {
+    debugPrint('Firebase init skipped: $e');
   }
 
   tz_data.initializeTimeZones();
-  await ReminderService().initialize();
+  await ReminderService.instance.initialize();
 
   if (Platform.isAndroid) {
     if (await Permission.notification.isGranted == false) {
@@ -50,52 +93,7 @@ void main() async {
       overrides: [
         preferencesServiceProvider.overrideWithValue(prefsService),
       ],
-      child: CrashGuard(child: TimboApp()),
+      child: const TimboApp(),
     ),
   );
-}
-
-class CrashGuard extends StatefulWidget {
-  final Widget child;
-  const CrashGuard({super.key, required this.child});
-
-  @override
-  State<CrashGuard> createState() => _CrashGuardState();
-}
-
-class _CrashGuardState extends State<CrashGuard> {
-  @override
-  void initState() {
-    super.initState();
-    ErrorWidget.builder = (details) {
-      return Material(
-        color: const Color(0xFF1A1D27),
-        child: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(32),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(Icons.error_outline, color: Colors.redAccent, size: 48),
-                const SizedBox(height: 16),
-                const Text(
-                  'Something went wrong',
-                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600, color: Colors.white),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  details.exception.toString(),
-                  style: const TextStyle(fontSize: 14, color: Colors.yellowAccent),
-                  textAlign: TextAlign.center,
-                ),
-              ],
-            ),
-          ),
-        ),
-      );
-    };
-  }
-
-  @override
-  Widget build(BuildContext context) => widget.child;
 }

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
@@ -95,11 +96,15 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
 
     return Scaffold(
       backgroundColor: TimboColors.appBackground,
+      resizeToAvoidBottomInset: false,
       appBar: AppBar(
         backgroundColor: TimboColors.appBackground,
         surfaceTintColor: Colors.transparent,
         elevation: 0,
         scrolledUnderElevation: 0,
+        systemOverlayStyle: SystemUiOverlayStyle.dark.copyWith(
+          statusBarColor: TimboColors.appBackground,
+        ),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back, color: TimboColors.ink),
           onPressed: () => context.pop(),
@@ -125,29 +130,32 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
             ),
         ],
       ),
-      body: Column(
-        children: [
-          if (isOffline)
-            Container(
-              width: double.infinity,
-              color: Colors.orange.shade100,
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              child: Row(
-                children: [
-                  const Icon(Icons.wifi_off, size: 16, color: Colors.orange),
-                  const SizedBox(width: 8),
-                  Text(
-                    'AI needs internet to think. You are offline.',
-                    style: TextStyle(fontSize: 13, color: Colors.orange.shade900),
-                  ),
-                ],
+      body: SafeArea(
+        top: false,
+        child: Column(
+          children: [
+            if (isOffline)
+              Container(
+                width: double.infinity,
+                color: Colors.orange.shade100,
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                child: Row(
+                  children: [
+                    const Icon(Icons.wifi_off, size: 16, color: Colors.orange),
+                    const SizedBox(width: 8),
+                    Text(
+                      'AI needs internet to think. You are offline.',
+                      style: TextStyle(fontSize: 13, color: Colors.orange.shade900),
+                    ),
+                  ],
+                ),
               ),
+            Expanded(
+              child: hasMessages ? _buildChatList(messages, isLoading) : _buildEmptyState(),
             ),
-          Expanded(
-            child: hasMessages ? _buildChatList(messages, isLoading) : _buildEmptyState(),
-          ),
-          _buildInputBar(),
-        ],
+            _buildInputBar(),
+          ],
+        ),
       ),
     );
   }
@@ -164,10 +172,10 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
               painter: _NotebookPainter(),
             ),
             const SizedBox(height: 20),
-            Text('Ask me anything about your Timbos.', style: TimboTypography.heading2),
+            Text('Hey! Ask me anything or just chat.', style: TimboTypography.heading2),
             const SizedBox(height: 8),
             Text(
-              "I have read everything you have written.",
+              "I have read your notes. Let's talk.",
               style: TimboTypography.body.copyWith(color: TimboColors.inkLight),
               textAlign: TextAlign.center,
             ),
@@ -178,13 +186,13 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
             ),
             const SizedBox(height: 8),
             _SuggestionChip(
-              label: 'Do I have any reminders today?',
-              onTap: () => _sendMessage('Do I have any reminders today?'),
+              label: 'Set a reminder for tomorrow at 9am',
+              onTap: () => _sendMessage('Set a reminder for tomorrow at 9am'),
             ),
             const SizedBox(height: 8),
             _SuggestionChip(
-              label: 'Summarize this week',
-              onTap: () => _sendMessage('Summarize this week'),
+              label: 'Summarize this week for me',
+              onTap: () => _sendMessage('Summarize this week for me'),
             ),
           ],
         ),
@@ -195,7 +203,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
   Widget _buildChatList(List<dynamic> messages, bool isLoading) {
     return ListView.builder(
       controller: _scrollController,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
       itemCount: messages.length + (isLoading ? 1 : 0),
       itemBuilder: (ctx, index) {
         if (isLoading && index == messages.length) {
@@ -233,6 +241,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
                         style: isUser
                             ? TimboTypography.button.copyWith(color: Colors.white, fontSize: 15)
                             : TimboTypography.body,
+                        softWrap: true,
                       ),
                     ),
                   ),
@@ -251,51 +260,51 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
       painter: _TopBorderPainter(),
       child: Container(
         color: TimboColors.surface,
-        padding: EdgeInsets.only(
-          left: 12,
-          right: 12,
-          top: 8,
-          bottom: MediaQuery.of(context).padding.bottom + 8,
-        ),
-        child: Row(
-          children: [
-            GestureDetector(
-              onTap: _toggleListening,
-              child: Icon(
-                _isListening ? Icons.mic : Icons.mic_none,
-                size: 20,
-                color: _isListening ? Colors.red : TimboColors.inkFaint,
-              ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: TextField(
-                controller: _inputController,
-                focusNode: _inputFocus,
-                decoration: InputDecoration(
-                  border: InputBorder.none,
-                  isCollapsed: true,
-                  hintText: 'Ask Timbo AI...',
-                  hintStyle: TimboTypography.body.copyWith(color: TimboColors.inkFaint),
+        child: SafeArea(
+          top: false,
+          child: Padding(
+            padding: const EdgeInsets.only(left: 12, right: 12, top: 8, bottom: 8),
+            child: Row(
+              children: [
+                GestureDetector(
+                  onTap: _toggleListening,
+                  child: Icon(
+                    _isListening ? Icons.mic : Icons.mic_none,
+                    size: 20,
+                    color: _isListening ? Colors.red : TimboColors.inkFaint,
+                  ),
                 ),
-                style: TimboTypography.body,
-                onSubmitted: _sendMessage,
-              ),
-            ),
-            const SizedBox(width: 8),
-            GestureDetector(
-              onTap: () => _sendMessage(_inputController.text),
-              child: Container(
-                width: 32,
-                height: 32,
-                decoration: const BoxDecoration(
-                  color: TimboColors.ink,
-                  shape: BoxShape.circle,
+                const SizedBox(width: 8),
+                Expanded(
+                  child: TextField(
+                    controller: _inputController,
+                    focusNode: _inputFocus,
+                    decoration: InputDecoration(
+                      border: InputBorder.none,
+                      isCollapsed: true,
+                      hintText: 'Ask Timbo AI...',
+                      hintStyle: TimboTypography.body.copyWith(color: TimboColors.inkFaint),
+                    ),
+                    style: TimboTypography.body,
+                    onSubmitted: _sendMessage,
+                  ),
                 ),
-                child: const Icon(Icons.arrow_upward, color: Colors.white, size: 18),
-              ),
+                const SizedBox(width: 8),
+                GestureDetector(
+                  onTap: () => _sendMessage(_inputController.text),
+                  child: Container(
+                    width: 32,
+                    height: 32,
+                    decoration: const BoxDecoration(
+                      color: TimboColors.ink,
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(Icons.arrow_upward, color: Colors.white, size: 18),
+                  ),
+                ),
+              ],
             ),
-          ],
+          ),
         ),
       ),
     );

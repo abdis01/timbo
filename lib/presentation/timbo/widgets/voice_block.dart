@@ -1,4 +1,4 @@
-import 'dart:math';
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:just_audio/just_audio.dart';
 import '../../../theme/colors.dart';
@@ -25,7 +25,8 @@ class _VoiceBlockState extends State<VoiceBlock> with TickerProviderStateMixin {
   Duration _duration = Duration.zero;
   Duration _position = Duration.zero;
   late final AnimationController _waveController;
-  final _random = Random(42);
+  StreamSubscription<Duration>? _positionSub;
+  StreamSubscription<PlayerState>? _stateSub;
 
   @override
   void initState() {
@@ -41,8 +42,11 @@ class _VoiceBlockState extends State<VoiceBlock> with TickerProviderStateMixin {
     try {
       await _player.setFilePath(widget.filePath);
       _duration = _player.duration ?? Duration.zero;
-      _player.positionStream.listen((p) => setState(() => _position = p));
-      _player.playerStateStream.listen((state) {
+      _positionSub = _player.positionStream.listen((p) {
+        if (mounted) setState(() => _position = p);
+      });
+      _stateSub = _player.playerStateStream.listen((state) {
+        if (!mounted) return;
         setState(() => _isPlaying = state.playing);
         if (state.playing) _waveController.repeat(reverse: true);
         else _waveController.stop();
@@ -56,6 +60,8 @@ class _VoiceBlockState extends State<VoiceBlock> with TickerProviderStateMixin {
 
   @override
   void dispose() {
+    _positionSub?.cancel();
+    _stateSub?.cancel();
     _player.dispose();
     _waveController.dispose();
     super.dispose();
@@ -84,7 +90,6 @@ class _VoiceBlockState extends State<VoiceBlock> with TickerProviderStateMixin {
               animation: _waveController,
               builder: (_, __) => Row(
                 children: List.generate(5, (i) {
-                  _random.nextDouble();
                   final h = _isPlaying ? 4 + _waveController.value * 12 : 6.0;
                   return Container(
                     width: 3,

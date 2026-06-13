@@ -33,7 +33,11 @@ class FolderDao extends DatabaseAccessor<TimboDatabase> with _$FolderDaoMixin {
       date: Value(today),
       createdAt: Value(now),
     ));
-    return (await getFolderByDate(today))!;
+    final folder = await getFolderByDate(today);
+    if (folder == null) {
+      throw Exception('Failed to create today\'s folder');
+    }
+    return folder;
   }
 
   Future<List<Folder>> searchFolders(String query) {

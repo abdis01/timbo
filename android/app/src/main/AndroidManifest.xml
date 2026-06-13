@@ -12,8 +12,9 @@
         android:maxSdkVersion="32"/>
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM"/>
     <uses-permission android:name="android.permission.USE_EXACT_ALARM"/>
+    <uses-permission android:name="android.permission.VIBRATE"/>
     <application
-        android:label="timbo_app"
+        android:label="Timbo"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity
@@ -49,6 +50,17 @@
                 <data
                     android:scheme="timboapp"
                     android:host="auth" />
+            </intent-filter>
+            <!-- Share intent filter -->
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/plain" />
+            </intent-filter>
+            <!-- Quick capture intent -->
+            <intent-filter>
+                <action android:name="com.timbo.timbo_app.action.CAPTURE" />
+                <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
         </activity>
         <!-- Don't delete the meta-data below.
