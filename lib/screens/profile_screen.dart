@@ -8,6 +8,7 @@ import '../providers/providers.dart';
 import '../core/widgets/sketch_container.dart';
 import '../theme/colors.dart';
 import '../theme/typography.dart';
+import '../services/reminder_service.dart';
 
 class ProfileScreen extends ConsumerStatefulWidget {
   const ProfileScreen({super.key});
@@ -89,6 +90,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                     : null,
                 onTap: () {
                   ref.read(preferencesServiceProvider).defaultFont = f;
+                  ref.invalidate(userFontFamilyProvider);
                   Navigator.pop(ctx);
                   setState(() {});
                 },
@@ -105,7 +107,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     final user = ref.watch(currentUserProvider);
     final userName = ref.watch(userNameProvider);
     final prefs = ref.watch(preferencesServiceProvider);
-    final shakeVal = prefs.shakeEnabled;
+    final shakeVal = ref.watch(shakeEnabledProvider);
     final notifVal = prefs.notificationsEnabled;
     final linesVal = prefs.linesEnabled;
     final defaultFont = prefs.defaultFont;
@@ -145,6 +147,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             defaultFont: defaultFont,
             onToggleShake: (v) {
               ref.read(preferencesServiceProvider).shakeEnabled = v;
+              ref.invalidate(shakeEnabledProvider);
               setState(() {});
             },
             onToggleNotifications: (v) {
@@ -282,11 +285,50 @@ class _PreferencesCard extends StatelessWidget {
             onChanged: onToggleShake,
             activeThumbColor: TimboColors.ink,
           ),
-          SwitchListTile(
+          ListTile(
             title: Text('Notifications', style: TimboTypography.body),
-            value: notificationsEnabled,
-            onChanged: onToggleNotifications,
-            activeThumbColor: TimboColors.ink,
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextButton(
+                  onPressed: () async {
+                    try {
+                      await ReminderService.instance.showTestNotification();
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('✓ Test notification sent! Check your status bar.'),
+                            backgroundColor: Color(0xFF3A7D44),
+                            behavior: SnackBarBehavior.floating,
+                          ),
+                        );
+                      }
+                    } catch (e) {
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('✗ Failed: ${e.toString()}'),
+                            backgroundColor: Colors.red,
+                            behavior: SnackBarBehavior.floating,
+                          ),
+                        );
+                      }
+                    }
+                  },
+                  style: TextButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    minimumSize: const Size(0, 0),
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                  child: const Text('Test', style: TextStyle(fontSize: 12, color: TimboColors.ink)),
+                ),
+                Switch(
+                  value: notificationsEnabled,
+                  onChanged: onToggleNotifications,
+                  activeColor: TimboColors.ink,
+                ),
+              ],
+            ),
           ),
           SwitchListTile(
             title: Text('Notebook Lines', style: TimboTypography.body),

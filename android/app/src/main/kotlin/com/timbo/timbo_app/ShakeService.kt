@@ -6,6 +6,7 @@ import android.app.NotificationManager
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.content.SharedPreferences
 import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
@@ -21,7 +22,7 @@ class ShakeService : Service(), SensorEventListener {
     companion object {
         const val CHANNEL_ID = "timbo_shake_channel"
         const val NOTIFICATION_ID = 1001
-        private const val SHAKE_THRESHOLD = 12.0
+        private const val SHAKE_THRESHOLD = 25.0
         private const val SHAKE_DEBOUNCE_MS = 1000L
     }
 
@@ -29,29 +30,23 @@ class ShakeService : Service(), SensorEventListener {
     private var lastShakeTime = 0L
     private var wakeLock: PowerManager.WakeLock? = null
     private var isDestroyed = false
+    private var prefs: SharedPreferences? = null
 
     override fun onCreate() {
         super.onCreate()
         createNotificationChannel()
         sensorManager = getSystemService(SENSOR_SERVICE) as SensorManager
+        prefs = applicationContext.getSharedPreferences("FlutterSharedPreferences", Context.MODE_PRIVATE)
         startForeground(NOTIFICATION_ID, buildNotification())
-        sensorManager?.registerListener(
-            this,
-            sensorManager?.getDefaultSensor(Sensor.TYPE_ACCELEROMETER),
-            SensorManager.SENSOR_DELAY_NORMAL
-        )
+        registerSensorIfEnabled()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (isDestroyed) {
-            sensorManager?.registerListener(
-                this,
-                sensorManager?.getDefaultSensor(Sensor.TYPE_ACCELEROMETER),
-                SensorManager.SENSOR_DELAY_NORMAL
-            )
             startForeground(NOTIFICATION_ID, buildNotification())
             isDestroyed = false
         }
+        registerSensorIfEnabled()
         return START_STICKY
     }
 
@@ -64,6 +59,21 @@ class ShakeService : Service(), SensorEventListener {
         val alarmManager = getSystemService(Context.ALARM_SERVICE) as android.app.AlarmManager
         alarmManager.set(android.app.AlarmManager.RTC, System.currentTimeMillis() + 100, pendingIntent)
         super.onTaskRemoved(rootIntent)
+    }
+
+    private fun isShakeEnabled(): Boolean {
+        return prefs?.getBoolean("setting_shake", true) ?: true
+    }
+
+    private fun registerSensorIfEnabled() {
+        sensorManager?.unregisterListener(this)
+        if (isShakeEnabled()) {
+            sensorManager?.registerListener(
+                this,
+                sensorManager?.getDefaultSensor(Sensor.TYPE_ACCELEROMETER),
+                SensorManager.SENSOR_DELAY_NORMAL
+            )
+        }
     }
 
     override fun onSensorChanged(event: SensorEvent) {

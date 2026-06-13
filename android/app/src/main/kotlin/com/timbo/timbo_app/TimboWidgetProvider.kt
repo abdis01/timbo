@@ -27,31 +27,11 @@ class TimboWidgetProvider : HomeWidgetProvider() {
                 )
                 setOnClickPendingIntent(R.id.widget_mic, micIntent)
 
-                val balanceIntent = HomeWidgetLaunchIntent.getActivity(
-                    context,
-                    MainActivity::class.java,
-                    Uri.parse("timbo://finance")
-                )
-                setOnClickPendingIntent(R.id.widget_balance, balanceIntent)
-
-                val balance = widgetData.getString("balance", null)
-                if (balance != null) {
-                    setTextViewText(R.id.widget_balance, balance)
-                    if (balance.startsWith("+")) {
-                        setTextColor(R.id.widget_balance, 0xFF34D399.toInt())
-                    } else {
-                        setTextColor(R.id.widget_balance, 0xFFF87171.toInt())
-                    }
-                } else {
-                    setTextViewText(R.id.widget_balance, "\$0")
-                    setTextColor(R.id.widget_balance, 0xFF94A3B8.toInt())
-                }
-
                 val reminder = widgetData.getString("reminder", null)
                 if (reminder != null) {
                     setTextViewText(R.id.widget_reminder, reminder)
                 } else {
-                    setTextViewText(R.id.widget_reminder, "No reminders today")
+                    setTextViewText(R.id.widget_reminder, "No reminders")
                 }
             }
 

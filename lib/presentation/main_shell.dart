@@ -24,31 +24,53 @@ class _MainShellState extends ConsumerState<MainShell> {
       body: widget.child,
       bottomNavigationBar: Container(
         decoration: BoxDecoration(
-          border: Border(top: BorderSide(color: TimboColors.borderLight, width: 0.5)),
-        ),
-        child: BottomNavigationBar(
-          currentIndex: activeIndex,
-          onTap: (i) {
-            switch (i) {
-              case 0: context.go('/home');
-              case 1: context.go('/search');
-              case 2: context.go('/ai-chat');
-              case 3: context.go('/profile');
-            }
-          },
-          backgroundColor: TimboColors.surface,
-          selectedItemColor: TimboColors.ink,
-          unselectedItemColor: TimboColors.inkFaint,
-          type: BottomNavigationBarType.fixed,
-          elevation: 0,
-          selectedFontSize: 11,
-          unselectedFontSize: 11,
-          items: const [
-            BottomNavigationBarItem(icon: Icon(Icons.home_rounded), label: 'Home'),
-            BottomNavigationBarItem(icon: Icon(Icons.search_rounded), label: 'Search'),
-            BottomNavigationBarItem(icon: Icon(Icons.chat_rounded), label: 'Chat'),
-            BottomNavigationBarItem(icon: Icon(Icons.person_rounded), label: 'Profile'),
+          color: TimboColors.surface,
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.06),
+              blurRadius: 12,
+              offset: const Offset(0, -2),
+            ),
           ],
+        ),
+        child: ClipRRect(
+          child: BottomNavigationBar(
+            currentIndex: activeIndex,
+            onTap: (i) {
+              switch (i) {
+                case 0: context.go('/home');
+                case 1: context.go('/search');
+                case 2: context.go('/ai-chat');
+                case 3: context.go('/profile');
+              }
+            },
+            backgroundColor: TimboColors.surface,
+            selectedItemColor: TimboColors.ink,
+            unselectedItemColor: TimboColors.inkFaint,
+            type: BottomNavigationBarType.fixed,
+            elevation: 0,
+            selectedFontSize: 12,
+            unselectedFontSize: 12,
+            selectedLabelStyle: const TextStyle(fontWeight: FontWeight.w600),
+            items: [
+              BottomNavigationBarItem(
+                icon: Icon(activeIndex == 0 ? Icons.home : Icons.home_outlined),
+                label: 'Home',
+              ),
+              BottomNavigationBarItem(
+                icon: Icon(activeIndex == 1 ? Icons.search : Icons.search_outlined),
+                label: 'Search',
+              ),
+              BottomNavigationBarItem(
+                icon: Icon(activeIndex == 2 ? Icons.chat : Icons.chat_outlined),
+                label: 'Chat',
+              ),
+              BottomNavigationBarItem(
+                icon: Icon(activeIndex == 3 ? Icons.person : Icons.person_outline),
+                label: 'Profile',
+              ),
+            ],
+          ),
         ),
       ),
     );

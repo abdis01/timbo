@@ -90,8 +90,7 @@ class _ReminderSheetState extends ConsumerState<ReminderSheet> {
     final repo = ref.read(timboRepositoryProvider);
     await repo.setReminder(widget.timboId, scheduledAt.millisecondsSinceEpoch, label);
 
-    final reminderService = ReminderService();
-    await reminderService.scheduleReminder(
+    await ReminderService.instance.scheduleReminder(
       id: widget.timboId,
       title: 'Timbo Reminder',
       body: widget.reminderLabel ?? 'You have a Timbo reminder!',
@@ -110,8 +109,7 @@ class _ReminderSheetState extends ConsumerState<ReminderSheet> {
     final repo = ref.read(timboRepositoryProvider);
     await repo.clearReminder(widget.timboId);
 
-    final reminderService = ReminderService();
-    await reminderService.cancelReminder(widget.timboId);
+    await ReminderService.instance.cancelReminder(widget.timboId);
 
     if (mounted) {
       Navigator.pop(context);

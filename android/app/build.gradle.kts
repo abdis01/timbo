@@ -9,6 +9,12 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
+kotlin {
+    compilerOptions {
+        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
+    }
+}
+
 android {
     namespace = "com.timbo.timbo_app"
     compileSdk = 36
@@ -57,6 +63,8 @@ android {
             )
         }
     }
+
+
 }
 
 flutter {

@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/painters/sketch_border_painter.dart';
@@ -75,11 +76,15 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: TimboColors.appBackground,
+      resizeToAvoidBottomInset: false,
       appBar: AppBar(
         backgroundColor: TimboColors.appBackground,
         surfaceTintColor: Colors.transparent,
         elevation: 0,
         scrolledUnderElevation: 0,
+        systemOverlayStyle: SystemUiOverlayStyle.dark.copyWith(
+          statusBarColor: TimboColors.appBackground,
+        ),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back, color: TimboColors.ink),
           onPressed: () => context.pop(),
@@ -96,11 +101,13 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
           onChanged: _search,
         ),
       ),
-      body: _isSearching
+      body: SafeArea(
+        top: false,
+        child: _isSearching
           ? const Center(child: CircularProgressIndicator())
           : _results.isNotEmpty
           ? ListView.builder(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
               itemCount: _results.length,
               itemBuilder: (_, i) => _SearchResultCard(result: _results[i]),
             )
@@ -114,11 +121,40 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                         painter: _SearchEmptyPainter(),
                       ),
                       const SizedBox(height: 16),
-                      Text('Nothing found.', style: TimboTypography.body.copyWith(color: TimboColors.inkLight)),
+                      Text(
+                        'No matches found',
+                        style: TimboTypography.body.copyWith(color: TimboColors.ink, fontWeight: FontWeight.w600),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Try a different search term',
+                        style: TimboTypography.body.copyWith(color: TimboColors.inkFaint, fontSize: 13),
+                      ),
                     ],
                   ),
                 )
-              : const SizedBox.shrink(),
+              : Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      CustomPaint(
+                        size: const Size(60, 60),
+                        painter: _SearchEmptyPainter(),
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        'Search your notes',
+                        style: TimboTypography.body.copyWith(color: TimboColors.ink, fontWeight: FontWeight.w600),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Type to search Timbos, folders, and notes',
+                        style: TimboTypography.body.copyWith(color: TimboColors.inkFaint, fontSize: 13),
+                      ),
+                    ],
+                  ),
+                ),
+      ),
     );
   }
 }
@@ -160,7 +196,12 @@ class _SearchResultCard extends ConsumerWidget {
                     children: [
                       const Icon(Icons.folder_outlined, size: 16, color: TimboColors.inkLight),
                       const SizedBox(width: 6),
-                      Text(folder.title.split(',').first, style: TimboTypography.timboTitle),
+                      Text(
+                        folder.title.split(',').first, 
+                        style: TimboTypography.timboTitle,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ],
                   ),
                   const SizedBox(height: 4),

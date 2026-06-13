@@ -1085,7 +1085,7 @@ class $TimbosTable extends Timbos with TableInfo<$TimbosTable, Timbo> {
     type: DriftSqlType.int,
     requiredDuringInsert: true,
     defaultConstraints: GeneratedColumn.constraintIsAlways(
-      'REFERENCES folders (id)',
+      'REFERENCES folders (id) ON DELETE CASCADE',
     ),
   );
   static const VerificationMeta _titleMeta = const VerificationMeta('title');
@@ -1659,7 +1659,7 @@ class $BlocksTable extends Blocks with TableInfo<$BlocksTable, Block> {
     type: DriftSqlType.int,
     requiredDuringInsert: true,
     defaultConstraints: GeneratedColumn.constraintIsAlways(
-      'REFERENCES timbos (id)',
+      'REFERENCES timbos (id) ON DELETE CASCADE',
     ),
   );
   static const VerificationMeta _typeMeta = const VerificationMeta('type');
@@ -2825,6 +2825,23 @@ abstract class _$TimboDatabase extends GeneratedDatabase {
     blocks,
     chatMessages,
   ];
+  @override
+  StreamQueryUpdateRules get streamUpdateRules => const StreamQueryUpdateRules([
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'folders',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('timbos', kind: UpdateKind.delete)],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'timbos',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('blocks', kind: UpdateKind.delete)],
+    ),
+  ]);
 }
 
 typedef $$CapturesTableCreateCompanionBuilder =
