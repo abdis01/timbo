@@ -1,4 +1,4 @@
-name: Build APK
+name: CI Build
 
 on:
   push:
@@ -9,6 +9,8 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      GRADLE_OPTS: -Dorg.gradle.jvmargs="-Xmx2g -XX:+UseParallelGC"
     steps:
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
